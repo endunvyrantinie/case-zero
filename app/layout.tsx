@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "CASE//ZERO — Interactive Crime Files",
-  description: "Interrogate suspects, examine evidence and solve fictional Malaysian noir cases."
+  description: "Sign in, interrogate AI suspects, examine evidence and solve timed fictional Malaysian noir cases."
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

@@ -51,7 +51,7 @@ export const cases: CasePublic[] = [
     objective:
       "Interrogate all four suspects, confront them with evidence, identify the killer, establish the motive, and submit the evidence that proves your case.",
     difficulty: "DETECTIVE",
-    estimatedMinutes: 25,
+    estimatedMinutes: 10,
     suspects: [
       { id: "alya", name: "Alya Zainal", age: 32, role: "Brand Consultant", relation: "Adrian's former fiancée", initials: "AZ", statement: "We argued downstairs. I never went to his room." },
       { id: "kelvin", name: "Kelvin Ting Jia Hao", age: 37, role: "Business Partner", relation: "Co-founder of Northbank Studio", initials: "KT", statement: "I was at the rooftop lounge most of the night. Adrian and I had disagreements, nothing more." },
@@ -92,7 +92,7 @@ export const cases: CasePublic[] = [
     objective:
       "Work out who tampered with Rafiq's drink, when it happened, and which apparently harmless lie hides the murder.",
     difficulty: "ROOKIE",
-    estimatedMinutes: 20,
+    estimatedMinutes: 10,
     suspects: [
       { id: "nadia", name: "Nadia Rahman", age: 30, role: "Pastry Chef", relation: "Rafiq's younger sister", initials: "NR", statement: "I left after the kitchen closed. We argued, but I wasn't there for the tasting." },
       { id: "jonathan", name: "Jonathan Liew", age: 33, role: "Food Reviewer", relation: "Invited guest", initials: "JL", statement: "Rafiq poured everything himself. I only tasted the desserts." },
@@ -132,7 +132,7 @@ export const cases: CasePublic[] = [
     objective:
       "Reconstruct the studio timeline, determine whether the late voice memo is genuine, and identify who used the recording session to manufacture an alibi.",
     difficulty: "INSPECTOR",
-    estimatedMinutes: 30,
+    estimatedMinutes: 10,
     suspects: [
       { id: "danial", name: "Danial Syed", age: 31, role: "Producer", relation: "Alicia's producer and ex-partner", initials: "DS", statement: "We fought about the album, then I left Studio B before midnight." },
       { id: "mei-ling", name: "Chong Mei Ling", age: 27, role: "Session Vocalist", relation: "Alicia's collaborator", initials: "CM", statement: "I recorded harmonies and went home. I never entered the booth after Alicia took over." },
