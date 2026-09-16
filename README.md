@@ -35,3 +35,4 @@ No new Vercel environment variables are needed. Keep:
 ## Deploy
 
 Upload the V5 project files into the existing GitHub repository and commit them. Vercel should redeploy automatically.
+V5 deployment
