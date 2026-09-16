@@ -41,3 +41,20 @@ with check (auth.uid() = user_id);
 create policy "Users can delete own case progress"
 on public.case_progress for delete
 using (auth.uid() = user_id);
+
+-- Monetisation entitlement: free users see ads, paid users remove them for life.
+create table if not exists public.user_entitlements (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  ad_free_lifetime boolean not null default false,
+  payment_provider text,
+  payment_reference text unique,
+  purchased_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.user_entitlements enable row level security;
+drop policy if exists "Users can read own entitlements" on public.user_entitlements;
+create policy "Users can read own entitlements" on public.user_entitlements for select using (auth.uid() = user_id);
+grant select on table public.user_entitlements to authenticated;
+notify pgrst, 'reload schema';

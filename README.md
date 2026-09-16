@@ -1,63 +1,47 @@
-# CASE//ZERO V6 — Cinematic Evidence Build
+# CASE//ZERO — Combined Commercial Update
 
-V6 upgrades the visual system without changing your existing Supabase database.
+This is the consolidated build requested after V6. It keeps the existing account/progress system and adds the commercial layer in one update.
 
-## What is new
+## Included
 
-- Realistic human portrait assets for victims and suspects.
-- Cinematic case-cover artwork on the homepage and investigation sidebar.
-- Every current evidence item now has a matching evidence image.
-- Evidence thumbnails appear directly in the Evidence Locker.
-- Opening evidence shows a large visual inspection view.
-- Subtle portrait/scene motion gives the workspace a more alive feel without video-generation costs.
-- Existing 10-minute timer, sign-in, Supabase progress and OpenAI interrogation remain unchanged.
+- Email sign-up/sign-in with Supabase
+- Cloud-saved progress, notes, interrogation history and scores
+- 10-minute investigation attempts
+- AI suspect interrogation via the OpenAI Responses API
+- Three current Malaysian cases with case-specific visual styling
+- Evidence locker with reviewed/unreviewed/locked progression
+- Realistic portrait/case-art refresh for key current assets
+- Original CASE//ZERO ambient audio loops for Kuching, Miri and Petaling Jaya
+- SFX for evidence, warnings, case solved and case failed
+- Music/SFX volume controls
+- Free users: unlimited cases + ad placements
+- Paid users: RM6.90 one-time lifetime ad removal
+- Account-level ad-free entitlement stored in Supabase
+- Stripe Checkout integration for the RM6.90 one-time purchase
+- Google AdSense-ready ad component; until AdSense is configured, the ad slots show a CASE//ZERO house ad instead
 
-## Upgrade from V5
+## Existing V6 users: upgrade steps
 
-1. Replace the files in your existing GitHub `case-zero` repository with this V6 project.
-2. Commit the changes.
-3. Vercel will redeploy automatically.
-4. No new SQL migration is required for V6.
-5. Keep all current Vercel environment variables exactly as they are.
+1. In **Supabase > SQL Editor**, run:
+   `supabase/full_update_migration.sql`
+2. Replace the files in the existing GitHub `case-zero` repository with this build and commit.
+3. Keep the existing OpenAI and Supabase public environment variables.
+4. In Vercel add these **Secret** environment variables:
+   - `SUPABASE_SERVICE_ROLE_KEY` — from Supabase server/admin API keys. Never expose it as NEXT_PUBLIC.
+   - `STRIPE_SECRET_KEY` — your Stripe secret API key.
+5. Optional, when Google AdSense is ready, add these **Config/public** variables:
+   - `NEXT_PUBLIC_ADSENSE_CLIENT` — e.g. `ca-pub-...`
+   - `NEXT_PUBLIC_ADSENSE_SLOT` — your display ad unit slot ID.
+6. Redeploy.
 
-## Visual convention for every future case
+## Payment flow
 
-The site now uses predictable asset paths. Future cases should follow the same naming system:
+Signed-in free user -> `/upgrade` -> server creates Stripe Checkout for **MYR 6.90** -> Stripe returns to `/upgrade/success` -> server verifies the paid checkout -> Supabase saves `ad_free_lifetime = true` -> ads disappear on that account.
 
-### Case cover
+The browser never receives `STRIPE_SECRET_KEY` or `SUPABASE_SERVICE_ROLE_KEY`.
 
-`public/case-art/<case-id-lowercase>.webp`
+## Important
 
-Example:
+Do not put secret keys in GitHub. Add them only in Vercel Environment Variables.
 
-`public/case-art/cz005.webp`
-
-### Victim portrait
-
-`public/portraits/<case-id-lowercase>-victim.webp`
-
-Example:
-
-`public/portraits/cz005-victim.webp`
-
-### Suspect portrait
-
-`public/portraits/<case-id-lowercase>-<suspect-id>.webp`
-
-Example:
-
-`public/portraits/cz005-siti.webp`
-
-### Evidence image
-
-`public/evidence/<case-id-lowercase>-<evidence-id>.webp`
-
-Example:
-
-`public/evidence/cz005-silver-earring.webp`
-
-The UI automatically builds these paths from the case ID and item ID, so future cases do not require special image wiring in the React components.
-
-## Notes
-
-All CASE//ZERO people and cases are fictional. The V6 portraits are visual casting assets for the prototype. The evidence visuals are fictional forensic/game props created specifically to match the clue named in each case.
+The generated audio files under `public/audio` are original programmatically-created ambience/SFX for this project and do not depend on commercial music tracks.

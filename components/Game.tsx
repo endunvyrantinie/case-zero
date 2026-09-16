@@ -7,6 +7,9 @@ import type { Session } from "@supabase/supabase-js";
 import type { CasePublic, Evidence } from "@/lib/cases";
 import { evidenceUnlocked, unlockRequirement } from "@/lib/investigation";
 import { getSupabase, type CloudProgress } from "@/lib/supabase";
+import { useEntitlement } from "@/lib/entitlement";
+import AdBanner from "@/components/AdBanner";
+import SoundMixer from "@/components/SoundMixer";
 
 type ChatMessage = { role: "player" | "suspect"; text: string };
 type Verdict = { solved: boolean; score: number; checks: { suspect: boolean; motive: boolean; evidence: boolean; forensicCore: boolean }; message: string; explanation?: string };
@@ -59,9 +62,14 @@ export default function Game({ caseData }: { caseData: CasePublic }) {
   const [secondsLeft, setSecondsLeft] = useState(ATTEMPT_SECONDS);
   const [attemptClosed, setAttemptClosed] = useState(false);
   const [soundOn, setSoundOn] = useState(false);
+  const [soundPanel, setSoundPanel] = useState(false);
+  const [musicVolume, setMusicVolume] = useState(0.55);
+  const [sfxVolume, setSfxVolume] = useState(0.75);
   const notesHydrated = useRef(false);
-  const audioCtx = useRef<AudioContext | null>(null);
-  const audioNodes = useRef<AudioNode[]>([]);
+  const ambientAudio = useRef<HTMLAudioElement | null>(null);
+  const warned60 = useRef(false);
+  const warned30 = useRef(false);
+  const { adFree } = useEntitlement(session);
 
   const suspect = useMemo(() => suspects.find((s) => s.id === activeSuspect)!, [activeSuspect, suspects]);
   const history = chats[activeSuspect] || [];
@@ -156,7 +164,28 @@ export default function Game({ caseData }: { caseData: CasePublic }) {
     return () => window.clearTimeout(id);
   }, [notes, ready, session, caseData.id]);
 
-  useEffect(() => () => stopAudio(), []);
+  useEffect(() => {
+    try {
+      const savedMusic = Number(localStorage.getItem("cz_music_volume"));
+      const savedSfx = Number(localStorage.getItem("cz_sfx_volume"));
+      if (Number.isFinite(savedMusic) && savedMusic >= 0 && savedMusic <= 1) setMusicVolume(savedMusic);
+      if (Number.isFinite(savedSfx) && savedSfx >= 0 && savedSfx <= 1) setSfxVolume(savedSfx);
+    } catch {}
+    return () => stopAudio();
+  }, []);
+
+  useEffect(() => {
+    if (ambientAudio.current) ambientAudio.current.volume = musicVolume * 0.55;
+    try { localStorage.setItem("cz_music_volume", String(musicVolume)); } catch {}
+  }, [musicVolume]);
+
+  useEffect(() => { try { localStorage.setItem("cz_sfx_volume", String(sfxVolume)); } catch {} }, [sfxVolume]);
+
+  useEffect(() => {
+    if (!soundOn || attemptClosed) return;
+    if (secondsLeft <= 60 && secondsLeft > 30 && !warned60.current) { warned60.current = true; playSfx("warning"); }
+    if (secondsLeft <= 30 && secondsLeft > 0 && !warned30.current) { warned30.current = true; playSfx("warning"); }
+  }, [secondsLeft, soundOn, attemptClosed]);
 
   async function saveCloud(update: Record<string, unknown>) {
     if (!session) return;
@@ -164,28 +193,32 @@ export default function Game({ caseData }: { caseData: CasePublic }) {
   }
 
   function stopAudio() {
-    audioNodes.current.forEach((node) => { try { (node as OscillatorNode).stop?.(); } catch {} try { node.disconnect(); } catch {} });
-    audioNodes.current = [];
-    if (audioCtx.current) { audioCtx.current.close().catch(() => undefined); audioCtx.current = null; }
+    if (ambientAudio.current) {
+      ambientAudio.current.pause();
+      ambientAudio.current.currentTime = 0;
+      ambientAudio.current = null;
+    }
+  }
+
+  function playSfx(name: "evidence" | "click" | "warning" | "solved" | "failed") {
+    if (!soundOn) return;
+    try {
+      const audio = new Audio(`/audio/${name}.mp3`);
+      audio.volume = Math.max(0, Math.min(1, sfxVolume));
+      audio.play().catch(() => undefined);
+    } catch {}
   }
 
   async function toggleSound() {
     if (soundOn) { stopAudio(); setSoundOn(false); return; }
-    const Ctx = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!Ctx) return;
-    const ctx = new Ctx();
-    const master = ctx.createGain();
-    master.gain.value = 0.035;
-    master.connect(ctx.destination);
-
-    const low = ctx.createOscillator(); low.type = "sine"; low.frequency.value = 52;
-    const mid = ctx.createOscillator(); mid.type = "triangle"; mid.frequency.value = caseData.id === "CZ004" ? 91 : caseData.id === "CZ003" ? 74 : 63;
-    const lowGain = ctx.createGain(); lowGain.gain.value = 0.7;
-    const midGain = ctx.createGain(); midGain.gain.value = 0.15;
-    low.connect(lowGain).connect(master); mid.connect(midGain).connect(master);
-    low.start(); mid.start();
-    audioCtx.current = ctx; audioNodes.current = [low, mid, lowGain, midGain, master];
-    setSoundOn(true);
+    try {
+      const audio = new Audio(`/audio/${caseData.id.toLowerCase()}-ambience.mp3`);
+      audio.loop = true;
+      audio.volume = musicVolume * 0.55;
+      await audio.play();
+      ambientAudio.current = audio;
+      setSoundOn(true);
+    } catch { setApiError("Your browser blocked audio. Click SOUND ON again after interacting with the page."); }
   }
 
   function toggleAttached(id: string) {
@@ -204,6 +237,7 @@ export default function Game({ caseData }: { caseData: CasePublic }) {
     if (!reviewed.includes(item.id) && !timedOut && !attemptClosed) {
       const next = [...reviewed, item.id];
       setReviewed(next);
+      playSfx("evidence");
       await saveCloud({ reviewed_evidence: next, notes, chats });
     }
   }
@@ -227,6 +261,7 @@ export default function Game({ caseData }: { caseData: CasePublic }) {
       if (!res.ok) throw new Error(data.error || "Interrogation failed.");
       const finalChats = { ...optimisticChats, [activeSuspect]: [...nextHistory, { role: "suspect" as const, text: data.reply }] };
       setChats(finalChats);
+      playSfx("click");
       await saveCloud({ chats: finalChats, notes, reviewed_evidence: reviewed });
     } catch (err) {
       setApiError(err instanceof Error ? err.message : "Interrogation failed.");
@@ -247,6 +282,7 @@ export default function Game({ caseData }: { caseData: CasePublic }) {
       const result = await res.json() as Verdict & { error?: string };
       if (!res.ok) throw new Error(result.error || "Could not submit accusation.");
       setVerdict(result); setAttemptClosed(true); setBestScore((old) => Math.max(old, result.score)); setAttempts((old) => old + 1);
+      playSfx(result.solved ? "solved" : "failed");
       if (result.solved) setSolvedBefore(true);
     } catch (err) { setApiError(err instanceof Error ? err.message : "Could not submit accusation."); }
   }
@@ -259,7 +295,7 @@ export default function Game({ caseData }: { caseData: CasePublic }) {
     }).eq("user_id", session.user.id).eq("case_id", caseData.id);
     if (error) { setApiError("Could not restart the investigation."); return; }
     setNotes(""); setChats({}); setReviewed([]); setVerdict(null); setAttached([]); setProof([]); setQuestion(""); setApiError(""); setTab("briefing"); setInspecting(null);
-    setDeadlineMs(deadline.getTime()); setSecondsLeft(ATTEMPT_SECONDS); setAttemptClosed(false); notesHydrated.current = true;
+    setDeadlineMs(deadline.getTime()); setSecondsLeft(ATTEMPT_SECONDS); setAttemptClosed(false); warned60.current = false; warned30.current = false; notesHydrated.current = true;
   }
 
   const minutes = Math.floor(secondsLeft / 60).toString().padStart(2, "0");
@@ -268,15 +304,18 @@ export default function Game({ caseData }: { caseData: CasePublic }) {
   if (!ready) return <main className="loading-screen"><div className="brand-mark">C//Z</div><div className="eyebrow">OPENING SECURE CASE FILE...</div></main>;
 
   return (
-    <main className="workspace-shell">
+    <main className={`workspace-shell case-${caseData.id.toLowerCase()}`}>
       <header className="workspace-topbar">
         <div className="workspace-brand"><span className="mini-brand">C//Z</span><div><div className="eyebrow">ACTIVE INVESTIGATION · {caseData.id}</div><strong>{caseData.title}</strong></div></div>
         <div className="workspace-actions">
           <div className="timer-block"><span>TIME REMAINING</span><b className={secondsLeft <= 60 ? "danger" : ""}>{minutes}:{seconds}</b></div>
           <button className={soundOn ? "sound-button active" : "sound-button"} onClick={toggleSound}>{soundOn ? "SOUND ON" : "SOUND OFF"}</button>
+          <button className="mix-button" onClick={() => setSoundPanel((v) => !v)}>MIX</button>
+          {adFree && <span className="adfree-badge workspace-adfree">AD-FREE</span>}
           <Link className="exit-button" href="/">EXIT</Link>
         </div>
       </header>
+      <SoundMixer open={soundPanel} soundOn={soundOn} musicVolume={musicVolume} sfxVolume={sfxVolume} onToggle={toggleSound} onMusic={setMusicVolume} onSfx={setSfxVolume} onClose={() => setSoundPanel(false)} />
 
       {(timedOut || attemptClosed) && <div className={`lock-banner ${timedOut ? "expired" : "closed"}`}><div><div className="eyebrow">{timedOut ? "TIME EXPIRED" : verdict?.solved ? "CASE CLOSED" : "ATTEMPT CLOSED"}</div><h2>{timedOut ? "The 10-minute investigation window has ended." : verdict?.message || "This attempt is closed."}</h2><p>Review the result or start a fresh 10-minute attempt.</p></div><button className="primary restart" onClick={restartAttempt}>NEW ATTEMPT</button></div>}
       {apiError && <div className="error workspace-error">{apiError}</div>}
@@ -301,6 +340,7 @@ export default function Game({ caseData }: { caseData: CasePublic }) {
           </nav>
 
           <div className="attempt-meta"><span>{caseData.difficulty}</span><span>ATTEMPT {attempts + (attemptClosed ? 0 : 1)}</span>{solvedBefore && <span className="closed-label">PREVIOUSLY SOLVED</span>}</div>
+          <AdBanner adFree={adFree} compact label="SPONSOR" />
         </aside>
 
         <section className="workspace-content">
@@ -371,7 +411,7 @@ export default function Game({ caseData }: { caseData: CasePublic }) {
               <div className="field-label">SELECT UP TO 5 REVIEWED PIECES OF PROOF</div><div className="proof-grid">{reviewedEvidence.map((e) => <button disabled={timedOut || attemptClosed} key={e.id} className={proof.includes(e.id) ? "proof-card selected" : "proof-card"} onClick={() => toggleProof(e.id)}><span>{typeGlyph(e.type)}</span><b>{e.title}</b><small>{e.type}</small></button>)}</div>
               {!reviewedEvidence.length && <p className="no-proof">Review evidence before submitting an accusation.</p>}
               <button className="primary submit" onClick={submitAccusation} disabled={timedOut || attemptClosed || reviewedEvidence.length < 3}>SUBMIT CASE</button>
-              {verdict && <div className={`verdict ${verdict.solved ? "closed" : "open"}`}><div className="score">{verdict.score}<small>/100</small></div><div><h2>{verdict.solved ? "CASE CLOSED" : "CASE REMAINS OPEN"}</h2><p>{verdict.message}</p><div className="checks"><span>{verdict.checks.suspect ? "✓" : "×"} Suspect</span><span>{verdict.checks.motive ? "✓" : "×"} Motive</span><span>{verdict.checks.evidence ? "✓" : "×"} Evidence</span><span>{verdict.checks.forensicCore ? "✓" : "×"} Core link</span></div>{verdict.explanation && <p className="explanation">{verdict.explanation}</p>}</div></div>}
+              {verdict && <><div className={`verdict ${verdict.solved ? "closed" : "open"}`}><div className="score">{verdict.score}<small>/100</small></div><div><h2>{verdict.solved ? "CASE CLOSED" : "CASE REMAINS OPEN"}</h2><p>{verdict.message}</p><div className="checks"><span>{verdict.checks.suspect ? "✓" : "×"} Suspect</span><span>{verdict.checks.motive ? "✓" : "×"} Motive</span><span>{verdict.checks.evidence ? "✓" : "×"} Evidence</span><span>{verdict.checks.forensicCore ? "✓" : "×"} Core link</span></div>{verdict.explanation && <p className="explanation">{verdict.explanation}</p>}</div></div><AdBanner adFree={adFree} label="POST-CASE ADVERTISEMENT" /></>}
             </div>
           </div>}
         </section>
