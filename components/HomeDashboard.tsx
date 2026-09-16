@@ -81,7 +81,7 @@ export default function HomeDashboard() {
           </section>
           <div className="library-heading"><div><div className="eyebrow">CASE ARCHIVE</div><h2>Available investigations</h2></div><span>10 MINUTES EACH</span></div>
           <section className="case-library">
-            {cases.map((item, index) => <Link href={`/login?next=/case/${item.id}`} className="case-card" key={item.id}><div className="case-card-top"><span>{item.id}</span><span className={`difficulty ${item.difficulty.toLowerCase()}`}>{item.difficulty}</span></div><div className="case-number">0{index + 1}</div><div className="case-kicker">{item.kicker}</div><h3>{item.title}</h3><p>{item.location}</p><div className="case-victim">VICTIM <b>{item.victim}</b></div><div className="case-card-bottom"><span>10 MIN</span><span>LOGIN TO OPEN</span></div></Link>)}
+            {cases.map((item, index) => <Link href={`/login?next=/case/${item.id}`} className="case-card" key={item.id}><img className="case-card-art" src={`/case-art/${item.id.toLowerCase()}.webp`} alt="" /><div className="case-card-overlay" /><div className="case-card-top"><span>{item.id}</span><span className={`difficulty ${item.difficulty.toLowerCase()}`}>{item.difficulty}</span></div><div className="case-number">0{index + 1}</div><div className="case-kicker">{item.kicker}</div><h3>{item.title}</h3><p>{item.location}</p><div className="case-victim">VICTIM <b>{item.victim}</b></div><div className="case-card-bottom"><span>10 MIN</span><span>LOGIN TO OPEN</span></div></Link>)}
           </section>
         </>
       ) : (
@@ -98,6 +98,7 @@ export default function HomeDashboard() {
               const p = progress[item.id];
               const active = p && !p.attempt_closed && p.attempt_deadline_at && new Date(p.attempt_deadline_at).getTime() > Date.now();
               return <Link href={`/case/${item.id}`} className="case-card" key={item.id}>
+                <img className="case-card-art" src={`/case-art/${item.id.toLowerCase()}.webp`} alt="" /><div className="case-card-overlay" />
                 <div className="case-card-top"><span>{item.id}</span><span className={`difficulty ${item.difficulty.toLowerCase()}`}>{item.difficulty}</span></div>
                 <div className="case-number">0{index + 1}</div><div className="case-kicker">{item.kicker}</div><h3>{item.title}</h3><p>{item.location}</p><div className="case-victim">VICTIM <b>{item.victim}</b></div>
                 <div className="case-card-bottom"><span>10 MIN</span>{active ? <span className="attempted-tag">CONTINUE</span> : p ? <span className={p.solved ? "solved-tag" : "attempted-tag"}>{p.solved ? `CLOSED · ${p.best_score}` : `OPEN · ${p.best_score}`}</span> : <span>UNOPENED</span>}</div>

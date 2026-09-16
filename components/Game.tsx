@@ -15,7 +15,11 @@ type WorkspaceTab = "briefing" | "evidence" | "suspects" | "notes" | "accuse";
 const ATTEMPT_SECONDS = 600;
 
 function portraitPath(caseId: string, personId: string) {
-  return `/portraits/${caseId.toLowerCase()}-${personId}.svg`;
+  return `/portraits/${caseId.toLowerCase()}-${personId}.webp`;
+}
+
+function evidencePath(caseId: string, evidenceId: string) {
+  return `/evidence/${caseId.toLowerCase()}-${evidenceId}.webp`;
 }
 
 function typeGlyph(type: string) {
@@ -280,7 +284,7 @@ export default function Game({ caseData }: { caseData: CasePublic }) {
       <div className="workspace-body">
         <aside className="workspace-sidebar">
           <div className="case-mini-card">
-            <img src={`/case-art/${caseData.id.toLowerCase()}.svg`} alt="Case location artwork" />
+            <img src={`/case-art/${caseData.id.toLowerCase()}.webp`} alt="Case location artwork" />
             <div><span>{caseData.kicker}</span><strong>{caseData.location}</strong><small>{caseData.scene}</small></div>
           </div>
 
@@ -319,7 +323,7 @@ export default function Game({ caseData }: { caseData: CasePublic }) {
                 const needs = unlockRequirement(caseData.id, item.id);
                 return <button key={item.id} className={`locker-card ${done ? "reviewed" : ""} ${!unlocked ? "locked" : ""}`} disabled={!unlocked} onClick={() => inspectEvidence(item)}>
                   <div className="locker-card-top"><span className={done ? "reviewed-badge" : unlocked ? "unreviewed-badge" : "locked-badge"}>{done ? "REVIEWED" : unlocked ? "UNREVIEWED" : "LOCKED"}</span><span>{item.type.toUpperCase()}</span></div>
-                  <div className="evidence-glyph">{typeGlyph(item.type)}</div><h3>{item.title}</h3>
+                  <div className="evidence-thumb"><img src={evidencePath(caseData.id, item.id)} alt={item.title} /></div><h3>{item.title}</h3>
                   <p>{unlocked ? (done ? item.description : "Evidence recovered. Open file to inspect the full finding.") : "Related evidence must be reviewed first."}</p>
                   {item.time && unlocked && <small>{item.time}</small>}
                   <b className="inspect-action">{!unlocked ? `REQUIRES ${needs.length} LINK${needs.length === 1 ? "" : "S"}` : done ? "✓ FINDING RECORDED" : "CLICK TO INSPECT"}</b>
@@ -373,7 +377,7 @@ export default function Game({ caseData }: { caseData: CasePublic }) {
         </section>
       </div>
 
-      {inspecting && <div className="evidence-modal" onClick={() => setInspecting(null)}><article className="evidence-modal-card" onClick={(e) => e.stopPropagation()}><button className="modal-close" onClick={() => setInspecting(null)}>×</button><div className="evidence-modal-visual"><span>{typeGlyph(inspecting.type)}</span><small>{inspecting.type}</small></div><div className="evidence-modal-copy"><div className="eyebrow">EVIDENCE FILE · {caseData.id}</div><h2>{inspecting.title}</h2>{inspecting.time && <b className="evidence-time">{inspecting.time}</b>}<p>{inspecting.description}</p><div className="finding-stamp">✓ FINDING RECORDED</div></div></article></div>}
+      {inspecting && <div className="evidence-modal" onClick={() => setInspecting(null)}><article className="evidence-modal-card" onClick={(e) => e.stopPropagation()}><button className="modal-close" onClick={() => setInspecting(null)}>×</button><div className="evidence-modal-visual"><img src={evidencePath(caseData.id, inspecting.id)} alt={inspecting.title} /><small>{inspecting.type}</small></div><div className="evidence-modal-copy"><div className="eyebrow">EVIDENCE FILE · {caseData.id}</div><h2>{inspecting.title}</h2>{inspecting.time && <b className="evidence-time">{inspecting.time}</b>}<p>{inspecting.description}</p><div className="finding-stamp">✓ FINDING RECORDED</div></div></article></div>}
     </main>
   );
 }

@@ -1,38 +1,63 @@
-# CASE//ZERO V5
+# CASE//ZERO V6 — Cinematic Evidence Build
 
-V5 changes the selected-case experience into a dedicated investigation workspace.
+V6 upgrades the visual system without changing your existing Supabase database.
 
-## What changed
+## What is new
 
-- Fixed investigation top bar with 10-minute timer, sound control and exit to Case Library.
-- Left-side investigation navigation: Briefing, Evidence Locker, Suspects, Notes and Accuse.
-- Evidence now has UNREVIEWED / REVIEWED / LOCKED states.
-- Some evidence unlocks only after prerequisite material is reviewed.
-- Evidence opens in a focused inspection modal.
-- Suspect interrogation is a dedicated workspace with dossier cards and cloud-saved chat history.
-- Only reviewed evidence can be used in interrogation or the final accusation.
-- Cloud-saved reviewed-evidence progress.
-- Animated noir dossier portraits for every victim and suspect.
-- Case-location artwork for all three cases.
-- Optional generated ambient detective hum via the browser Web Audio API; no copyrighted audio files are used.
-- Sign-in, cloud progress and the 10-minute attempt system from V4 remain in place.
+- Realistic human portrait assets for victims and suspects.
+- Cinematic case-cover artwork on the homepage and investigation sidebar.
+- Every current evidence item now has a matching evidence image.
+- Evidence thumbnails appear directly in the Evidence Locker.
+- Opening evidence shows a large visual inspection view.
+- Subtle portrait/scene motion gives the workspace a more alive feel without video-generation costs.
+- Existing 10-minute timer, sign-in, Supabase progress and OpenAI interrogation remain unchanged.
 
-## IMPORTANT: existing V4 database
+## Upgrade from V5
 
-Before deploying V5, run this file once in Supabase > SQL Editor:
+1. Replace the files in your existing GitHub `case-zero` repository with this V6 project.
+2. Commit the changes.
+3. Vercel will redeploy automatically.
+4. No new SQL migration is required for V6.
+5. Keep all current Vercel environment variables exactly as they are.
 
-`supabase/v5_migration.sql`
+## Visual convention for every future case
 
-It adds the `reviewed_evidence` field used by the Evidence Locker.
+The site now uses predictable asset paths. Future cases should follow the same naming system:
 
-No new Vercel environment variables are needed. Keep:
+### Case cover
 
-- `OPENAI_API_KEY`
-- `OPENAI_MODEL`
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+`public/case-art/<case-id-lowercase>.webp`
 
-## Deploy
+Example:
 
-Upload the V5 project files into the existing GitHub repository and commit them. Vercel should redeploy automatically.
-V5 deployment
+`public/case-art/cz005.webp`
+
+### Victim portrait
+
+`public/portraits/<case-id-lowercase>-victim.webp`
+
+Example:
+
+`public/portraits/cz005-victim.webp`
+
+### Suspect portrait
+
+`public/portraits/<case-id-lowercase>-<suspect-id>.webp`
+
+Example:
+
+`public/portraits/cz005-siti.webp`
+
+### Evidence image
+
+`public/evidence/<case-id-lowercase>-<evidence-id>.webp`
+
+Example:
+
+`public/evidence/cz005-silver-earring.webp`
+
+The UI automatically builds these paths from the case ID and item ID, so future cases do not require special image wiring in the React components.
+
+## Notes
+
+All CASE//ZERO people and cases are fictional. The V6 portraits are visual casting assets for the prototype. The evidence visuals are fictional forensic/game props created specifically to match the clue named in each case.
