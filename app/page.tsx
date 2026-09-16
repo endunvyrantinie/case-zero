@@ -1,5 +1,2 @@
-import Game from "@/components/Game";
-
-export default function Home() {
-  return <Game />;
-}
+import HomeDashboard from "@/components/HomeDashboard";
+export default function Home() { return <HomeDashboard />; }

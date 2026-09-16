@@ -1,38 +1,28 @@
-# CASE//ZERO V2 — 11:47
+# CASE//ZERO V3
 
-A deployable Next.js prototype for a Malaysian noir AI detective game.
+Interactive Malaysian noir detective game built with Next.js and the OpenAI Responses API.
 
-## What is included
-- Malaysian case: `11:47`, set at fictional Seroja House in Kuching
-- Four suspects with different hidden secrets
-- AI-powered interrogation via OpenAI Responses API
-- Evidence attachment during interrogation
-- Server-side case secrets (killer is not shipped to the browser)
-- Server-side final accusation scoring
-- Detective notes and responsive noir UI
+## What's new in V3
+- Home dashboard instead of opening directly into a case
+- Case library with 3 playable cases
+- Local score/progress tracking
+- Cases solved, average score, total score and accusation count
+- Separate case URLs (`/case/CZ002`, etc.)
+- Auto-saved detective notes per case
+- Evidence cards can be attached directly to interrogations
+- Server-side secrets and final solutions remain hidden from the browser
 
-## Required environment variables
-Create `.env.local` for local development, or add these in Vercel Project Settings → Environment Variables:
+## Cases
+- CZ002 — 11:47 — Kuching
+- CZ003 — AFTER CLOSING — Miri
+- CZ004 — DEAD AIR — Petaling Jaya
 
-```
-OPENAI_API_KEY=your_secret_key
-OPENAI_MODEL=gpt-5.6-luna
-```
+## Environment variables
+Keep your existing Vercel environment variables:
 
-Never commit `.env.local`.
+`OPENAI_API_KEY=...`
 
-## Deploy on Vercel
-1. Put this project in a GitHub repository, or import the folder through your preferred Vercel workflow.
-2. In Vercel, create/import the project.
-3. Add `OPENAI_API_KEY` and `OPENAI_MODEL` under Settings → Environment Variables.
-4. Deploy.
+`OPENAI_MODEL=gpt-5.6-luna`
 
-## Local development
-```
-npm install
-npm run dev
-```
-Then open http://localhost:3000
-
-## Important
-The case is fictional. The names, hotel, company, events, and crime are invented for the game.
+## Deploy
+Push these files to the same GitHub repository connected to Vercel. Vercel should redeploy automatically.
