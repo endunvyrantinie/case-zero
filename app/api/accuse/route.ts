@@ -19,6 +19,8 @@ export async function POST(request: NextRequest) {
     if (!secretCase) return NextResponse.json({ error: "Unknown case." }, { status: 404 });
     const solution = secretCase.solution;
     const selected = Array.isArray(body.evidenceIds) ? [...new Set(body.evidenceIds)].slice(0, 5) : [];
+    const reviewedEvidence = Array.isArray(auth.progress.reviewed_evidence) ? auth.progress.reviewed_evidence : [];
+    if (selected.some((id) => !reviewedEvidence.includes(id))) return NextResponse.json({ error: "Only reviewed evidence can support an accusation." }, { status: 403 });
 
     const suspectCorrect = body.suspectId === solution.killer;
     const motiveCorrect = body.motiveId === solution.motive;

@@ -27,6 +27,7 @@ export type CloudProgress = {
   last_played_at: string | null;
   notes: string;
   chats: Record<string, { role: "player" | "suspect"; text: string }[]>;
+  reviewed_evidence: string[];
   attempt_started_at: string | null;
   attempt_deadline_at: string | null;
   attempt_closed: boolean;

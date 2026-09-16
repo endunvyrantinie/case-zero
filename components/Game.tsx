@@ -4,23 +4,43 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import type { CasePublic } from "@/lib/cases";
+import type { CasePublic, Evidence } from "@/lib/cases";
+import { evidenceUnlocked, unlockRequirement } from "@/lib/investigation";
 import { getSupabase, type CloudProgress } from "@/lib/supabase";
 
 type ChatMessage = { role: "player" | "suspect"; text: string };
 type Verdict = { solved: boolean; score: number; checks: { suspect: boolean; motive: boolean; evidence: boolean; forensicCore: boolean }; message: string; explanation?: string };
+type WorkspaceTab = "briefing" | "evidence" | "suspects" | "notes" | "accuse";
 
 const ATTEMPT_SECONDS = 600;
+
+function portraitPath(caseId: string, personId: string) {
+  return `/portraits/${caseId.toLowerCase()}-${personId}.svg`;
+}
+
+function typeGlyph(type: string) {
+  const t = type.toLowerCase();
+  if (t.includes("video") || t.includes("image")) return "▣";
+  if (t.includes("audio")) return "≈";
+  if (t.includes("digital") || t.includes("log")) return "⌁";
+  if (t.includes("financial") || t.includes("document")) return "≡";
+  if (t.includes("forensic")) return "✦";
+  if (t.includes("physical") || t.includes("scene")) return "◆";
+  return "•";
+}
 
 export default function Game({ caseData }: { caseData: CasePublic }) {
   const router = useRouter();
   const { suspects, evidence, motiveOptions } = caseData;
   const [session, setSession] = useState<Session | null>(null);
   const [ready, setReady] = useState(false);
+  const [tab, setTab] = useState<WorkspaceTab>("briefing");
   const [activeSuspect, setActiveSuspect] = useState(suspects[0].id);
   const [question, setQuestion] = useState("");
   const [attached, setAttached] = useState<string[]>([]);
   const [chats, setChats] = useState<Record<string, ChatMessage[]>>({});
+  const [reviewed, setReviewed] = useState<string[]>([]);
+  const [inspecting, setInspecting] = useState<Evidence | null>(null);
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState("");
   const [notes, setNotes] = useState("");
@@ -34,12 +54,18 @@ export default function Game({ caseData }: { caseData: CasePublic }) {
   const [deadlineMs, setDeadlineMs] = useState(0);
   const [secondsLeft, setSecondsLeft] = useState(ATTEMPT_SECONDS);
   const [attemptClosed, setAttemptClosed] = useState(false);
+  const [soundOn, setSoundOn] = useState(false);
   const notesHydrated = useRef(false);
+  const audioCtx = useRef<AudioContext | null>(null);
+  const audioNodes = useRef<AudioNode[]>([]);
 
   const suspect = useMemo(() => suspects.find((s) => s.id === activeSuspect)!, [activeSuspect, suspects]);
   const history = chats[activeSuspect] || [];
-  const totalQuestions = Object.values(chats).flat().filter((m) => m.role === "player").length;
   const timedOut = ready && secondsLeft <= 0 && !attemptClosed;
+  const questionedSuspects = suspects.filter((s) => (chats[s.id] || []).some((m) => m.role === "player")).length;
+  const progressPct = Math.round(((reviewed.length / evidence.length) * 0.7 + (questionedSuspects / suspects.length) * 0.3) * 100);
+  const availableEvidence = evidence.filter((e) => evidenceUnlocked(caseData.id, e.id, reviewed));
+  const reviewedEvidence = evidence.filter((e) => reviewed.includes(e.id));
 
   useEffect(() => {
     const supabase = getSupabase();
@@ -73,6 +99,7 @@ export default function Game({ caseData }: { caseData: CasePublic }) {
       if (canResume && row) {
         setChats((row.chats || {}) as Record<string, ChatMessage[]>);
         setNotes(row.notes || "");
+        setReviewed(Array.isArray(row.reviewed_evidence) ? row.reviewed_evidence : []);
         setDeadlineMs(existingDeadline);
         setAttemptClosed(false);
       } else {
@@ -84,18 +111,20 @@ export default function Game({ caseData }: { caseData: CasePublic }) {
           solved: row?.solved || false,
           best_score: row?.best_score || 0,
           attempts: row?.attempts || 0,
-          last_played_at: new Date().toISOString(),
+          last_played_at: start.toISOString(),
           notes: "",
           chats: {},
+          reviewed_evidence: [],
           attempt_started_at: start.toISOString(),
           attempt_deadline_at: deadline.toISOString(),
           attempt_closed: false,
-          updated_at: new Date().toISOString()
+          updated_at: start.toISOString()
         };
         const { error: saveError } = await supabase.from("case_progress").upsert(payload, { onConflict: "user_id,case_id" });
-        if (saveError) setApiError("Could not start the investigation. Check the Supabase database setup.");
+        if (saveError) setApiError("Could not start the investigation. Run the V5 Supabase migration first.");
         setChats({});
         setNotes("");
+        setReviewed([]);
         setDeadlineMs(deadline.getTime());
         setAttemptClosed(false);
       }
@@ -123,13 +152,57 @@ export default function Game({ caseData }: { caseData: CasePublic }) {
     return () => window.clearTimeout(id);
   }, [notes, ready, session, caseData.id]);
 
-  async function saveChats(nextChats: Record<string, ChatMessage[]>) {
+  useEffect(() => () => stopAudio(), []);
+
+  async function saveCloud(update: Record<string, unknown>) {
     if (!session) return;
-    await getSupabase().from("case_progress").update({ chats: nextChats, notes, last_played_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("user_id", session.user.id).eq("case_id", caseData.id);
+    await getSupabase().from("case_progress").update({ ...update, last_played_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("user_id", session.user.id).eq("case_id", caseData.id);
   }
 
-  function toggleAttached(id: string) { if (!timedOut && !attemptClosed) setAttached((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : prev.length < 3 ? [...prev, id] : prev); }
-  function toggleProof(id: string) { if (!timedOut && !attemptClosed) setProof((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : prev.length < 5 ? [...prev, id] : prev); }
+  function stopAudio() {
+    audioNodes.current.forEach((node) => { try { (node as OscillatorNode).stop?.(); } catch {} try { node.disconnect(); } catch {} });
+    audioNodes.current = [];
+    if (audioCtx.current) { audioCtx.current.close().catch(() => undefined); audioCtx.current = null; }
+  }
+
+  async function toggleSound() {
+    if (soundOn) { stopAudio(); setSoundOn(false); return; }
+    const Ctx = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
+    const master = ctx.createGain();
+    master.gain.value = 0.035;
+    master.connect(ctx.destination);
+
+    const low = ctx.createOscillator(); low.type = "sine"; low.frequency.value = 52;
+    const mid = ctx.createOscillator(); mid.type = "triangle"; mid.frequency.value = caseData.id === "CZ004" ? 91 : caseData.id === "CZ003" ? 74 : 63;
+    const lowGain = ctx.createGain(); lowGain.gain.value = 0.7;
+    const midGain = ctx.createGain(); midGain.gain.value = 0.15;
+    low.connect(lowGain).connect(master); mid.connect(midGain).connect(master);
+    low.start(); mid.start();
+    audioCtx.current = ctx; audioNodes.current = [low, mid, lowGain, midGain, master];
+    setSoundOn(true);
+  }
+
+  function toggleAttached(id: string) {
+    if (timedOut || attemptClosed || !reviewed.includes(id)) return;
+    setAttached((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : prev.length < 3 ? [...prev, id] : prev);
+  }
+
+  function toggleProof(id: string) {
+    if (timedOut || attemptClosed || !reviewed.includes(id)) return;
+    setProof((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : prev.length < 5 ? [...prev, id] : prev);
+  }
+
+  async function inspectEvidence(item: Evidence) {
+    if (!evidenceUnlocked(caseData.id, item.id, reviewed)) return;
+    setInspecting(item);
+    if (!reviewed.includes(item.id) && !timedOut && !attemptClosed) {
+      const next = [...reviewed, item.id];
+      setReviewed(next);
+      await saveCloud({ reviewed_evidence: next, notes, chats });
+    }
+  }
 
   async function askSuspect() {
     const clean = question.trim();
@@ -138,8 +211,7 @@ export default function Game({ caseData }: { caseData: CasePublic }) {
     const playerMessage: ChatMessage = { role: "player", text: clean };
     const nextHistory = [...history, playerMessage];
     const optimisticChats = { ...chats, [activeSuspect]: nextHistory };
-    setChats(optimisticChats);
-    setQuestion("");
+    setChats(optimisticChats); setQuestion("");
 
     try {
       const res = await fetch("/api/interrogate", {
@@ -151,10 +223,10 @@ export default function Game({ caseData }: { caseData: CasePublic }) {
       if (!res.ok) throw new Error(data.error || "Interrogation failed.");
       const finalChats = { ...optimisticChats, [activeSuspect]: [...nextHistory, { role: "suspect" as const, text: data.reply }] };
       setChats(finalChats);
-      await saveChats(finalChats);
+      await saveCloud({ chats: finalChats, notes, reviewed_evidence: reviewed });
     } catch (err) {
       setApiError(err instanceof Error ? err.message : "Interrogation failed.");
-      await saveChats(optimisticChats);
+      await saveCloud({ chats: optimisticChats, notes, reviewed_evidence: reviewed });
     } finally { setLoading(false); }
   }
 
@@ -162,7 +234,7 @@ export default function Game({ caseData }: { caseData: CasePublic }) {
     if (!session || timedOut || attemptClosed) return;
     setVerdict(null); setApiError("");
     try {
-      await saveChats(chats);
+      await saveCloud({ chats, notes, reviewed_evidence: reviewed });
       const res = await fetch("/api/accuse", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
@@ -170,31 +242,19 @@ export default function Game({ caseData }: { caseData: CasePublic }) {
       });
       const result = await res.json() as Verdict & { error?: string };
       if (!res.ok) throw new Error(result.error || "Could not submit accusation.");
-      setVerdict(result);
-      setAttemptClosed(true);
-      setBestScore((old) => Math.max(old, result.score));
-      setAttempts((old) => old + 1);
+      setVerdict(result); setAttemptClosed(true); setBestScore((old) => Math.max(old, result.score)); setAttempts((old) => old + 1);
       if (result.solved) setSolvedBefore(true);
-    } catch (err) {
-      setApiError(err instanceof Error ? err.message : "Could not submit accusation.");
-    }
+    } catch (err) { setApiError(err instanceof Error ? err.message : "Could not submit accusation."); }
   }
 
   async function restartAttempt() {
     if (!session) return;
-    const start = new Date();
-    const deadline = new Date(start.getTime() + ATTEMPT_SECONDS * 1000);
+    const start = new Date(); const deadline = new Date(start.getTime() + ATTEMPT_SECONDS * 1000);
     const { error } = await getSupabase().from("case_progress").update({
-      notes: "",
-      chats: {},
-      attempt_started_at: start.toISOString(),
-      attempt_deadline_at: deadline.toISOString(),
-      attempt_closed: false,
-      last_played_at: start.toISOString(),
-      updated_at: start.toISOString()
+      notes: "", chats: {}, reviewed_evidence: [], attempt_started_at: start.toISOString(), attempt_deadline_at: deadline.toISOString(), attempt_closed: false, last_played_at: start.toISOString(), updated_at: start.toISOString()
     }).eq("user_id", session.user.id).eq("case_id", caseData.id);
     if (error) { setApiError("Could not restart the investigation."); return; }
-    setNotes(""); setChats({}); setVerdict(null); setAttached([]); setProof([]); setQuestion(""); setApiError("");
+    setNotes(""); setChats({}); setReviewed([]); setVerdict(null); setAttached([]); setProof([]); setQuestion(""); setApiError(""); setTab("briefing"); setInspecting(null);
     setDeadlineMs(deadline.getTime()); setSecondsLeft(ATTEMPT_SECONDS); setAttemptClosed(false); notesHydrated.current = true;
   }
 
@@ -204,48 +264,116 @@ export default function Game({ caseData }: { caseData: CasePublic }) {
   if (!ready) return <main className="loading-screen"><div className="brand-mark">C//Z</div><div className="eyebrow">OPENING SECURE CASE FILE...</div></main>;
 
   return (
-    <main className="game-shell">
-      <nav className="game-nav"><Link href="/">← CASE LIBRARY</Link><div><span>{caseData.difficulty}</span><span>ATTEMPTS {attempts}</span>{bestScore > 0 && <span>BEST {bestScore}</span>}<strong className={`case-timer ${secondsLeft <= 60 ? "danger" : ""}`}>{minutes}:{seconds}</strong></div></nav>
-      <header className="topbar"><div><div className="eyebrow">CASE//ZERO · {caseData.id} · {caseData.kicker}</div><h1>{caseData.title}</h1></div><div className="case-meta"><span>{caseData.location}</span><span>{caseData.scene}</span></div></header>
+    <main className="workspace-shell">
+      <header className="workspace-topbar">
+        <div className="workspace-brand"><span className="mini-brand">C//Z</span><div><div className="eyebrow">ACTIVE INVESTIGATION · {caseData.id}</div><strong>{caseData.title}</strong></div></div>
+        <div className="workspace-actions">
+          <div className="timer-block"><span>TIME REMAINING</span><b className={secondsLeft <= 60 ? "danger" : ""}>{minutes}:{seconds}</b></div>
+          <button className={soundOn ? "sound-button active" : "sound-button"} onClick={toggleSound}>{soundOn ? "SOUND ON" : "SOUND OFF"}</button>
+          <Link className="exit-button" href="/">EXIT</Link>
+        </div>
+      </header>
 
-      {(timedOut || attemptClosed) && <section className={`lock-banner ${timedOut ? "expired" : "closed"}`}><div><div className="eyebrow">{timedOut ? "TIME EXPIRED" : verdict?.solved ? "CASE CLOSED" : "ATTEMPT CLOSED"}</div><h2>{timedOut ? "The investigation file is locked." : verdict?.solved ? "Your evidence has been filed." : "You only get one accusation per attempt."}</h2><p>{timedOut ? "Interrogation and accusation are disabled after 10:00. Start a fresh attempt to investigate again." : solvedBefore ? `Best score: ${bestScore}` : "Reopen the case for a fresh 10-minute investigation."}</p></div><button className="primary restart" onClick={restartAttempt}>START NEW 10:00 ATTEMPT</button></section>}
+      {(timedOut || attemptClosed) && <div className={`lock-banner ${timedOut ? "expired" : "closed"}`}><div><div className="eyebrow">{timedOut ? "TIME EXPIRED" : verdict?.solved ? "CASE CLOSED" : "ATTEMPT CLOSED"}</div><h2>{timedOut ? "The 10-minute investigation window has ended." : verdict?.message || "This attempt is closed."}</h2><p>Review the result or start a fresh 10-minute attempt.</p></div><button className="primary restart" onClick={restartAttempt}>NEW ATTEMPT</button></div>}
+      {apiError && <div className="error workspace-error">{apiError}</div>}
 
-      <section className="hero panel"><div><div className="eyebrow">VICTIM</div><h2>{caseData.victim}</h2><p>{caseData.victimAge} · {caseData.victimRole}</p></div><div className="hero-copy"><p>{caseData.briefing}</p><p className="objective">OBJECTIVE: {caseData.objective}</p></div></section>
-
-      <div className="case-status"><span>{suspects.length} SUSPECTS</span><span>{evidence.length} EVIDENCE ITEMS</span><span>{totalQuestions} QUESTIONS ASKED</span><span>CLOUD SAVE ON</span></div>
-
-      <div className="layout">
-        <section className="left-column">
-          <div className="section-title"><span>01</span> SUSPECTS</div>
-          <div className="suspect-grid">{suspects.map((s) => <button key={s.id} disabled={timedOut || attemptClosed} className={`suspect-card ${activeSuspect === s.id ? "active" : ""}`} onClick={() => { setActiveSuspect(s.id); setAttached([]); }}><div className="portrait">{s.initials}</div><div><strong>{s.name}</strong><small>{s.role}</small><small>{s.relation}</small></div><div className="question-count">{(chats[s.id] || []).filter((m) => m.role === "player").length}</div></button>)}</div>
-
-          <div className="section-title"><span>02</span> EVIDENCE BOARD</div>
-          <div className="evidence-grid">{evidence.map((e) => <article className={`evidence-card ${attached.includes(e.id) ? "attached" : ""}`} key={e.id} onClick={() => toggleAttached(e.id)}><div className="evidence-top"><span>{e.type}</span>{e.time && <b>{e.time}</b>}</div><h3>{e.title}</h3><p>{e.description}</p><div className="evidence-action">{attached.includes(e.id) ? "ATTACHED" : "CLICK TO CONFRONT"}</div></article>)}</div>
-        </section>
-
-        <aside className="right-column">
-          <div className="interrogation panel">
-            <div className="interrogation-head"><div className="portrait large">{suspect.initials}</div><div><div className="eyebrow">INTERROGATION</div><h2>{suspect.name}</h2><p>Initial statement: “{suspect.statement}”</p></div></div>
-            <div className="chat">{history.length === 0 && <div className="empty-chat">Ask about timeline, motive, relationships, or confront the suspect with evidence.</div>}{history.map((m, i) => <div key={i} className={`bubble ${m.role}`}><span>{m.role === "player" ? "YOU" : suspect.name.toUpperCase()}</span>{m.text}</div>)}{loading && <div className="bubble suspect"><span>{suspect.name.toUpperCase()}</span>...</div>}</div>
-            <div className="attach-box"><div className="field-label">ATTACH EVIDENCE · MAX 3</div><div className="chips">{evidence.map((e) => <button disabled={timedOut || attemptClosed} key={e.id} className={attached.includes(e.id) ? "chip selected" : "chip"} onClick={() => toggleAttached(e.id)}>{e.title}</button>)}</div></div>
-            <div className="ask-row"><textarea disabled={timedOut || attemptClosed} value={question} onChange={(e) => setQuestion(e.target.value)} placeholder={timedOut ? "TIME EXPIRED" : `Question ${suspect.name.split(" ")[0]}...`} maxLength={500} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); askSuspect(); } }} /><button className="primary" onClick={askSuspect} disabled={loading || timedOut || attemptClosed}>ASK</button></div>
-            {apiError && <div className="error">{apiError}</div>}
+      <div className="workspace-body">
+        <aside className="workspace-sidebar">
+          <div className="case-mini-card">
+            <img src={`/case-art/${caseData.id.toLowerCase()}.svg`} alt="Case location artwork" />
+            <div><span>{caseData.kicker}</span><strong>{caseData.location}</strong><small>{caseData.scene}</small></div>
           </div>
 
-          <div className="panel notes"><div className="section-title compact"><span>03</span> DETECTIVE NOTES <em>CLOUD SAVED</em></div><textarea disabled={timedOut || attemptClosed} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Write contradictions, timelines, theories..." /></div>
+          <div className="progress-box">
+            <div className="progress-head"><span>INVESTIGATION</span><b>{progressPct}%</b></div>
+            <div className="progress-track"><i style={{ width: `${progressPct}%` }} /></div>
+            <div className="progress-stats"><span>{reviewed.length}/{evidence.length}<small>EVIDENCE</small></span><span>{questionedSuspects}/{suspects.length}<small>QUESTIONED</small></span><span>{bestScore}<small>BEST SCORE</small></span></div>
+          </div>
+
+          <nav className="workspace-nav">
+            {([
+              ["briefing", "01", "Briefing"], ["evidence", "02", "Evidence Locker"], ["suspects", "03", "Suspects"], ["notes", "04", "Detective Notes"], ["accuse", "05", "Accuse"]
+            ] as [WorkspaceTab,string,string][]).map(([id,no,label]) => <button key={id} className={tab === id ? "active" : ""} onClick={() => setTab(id)}><b>{no}</b><span>{label}</span>{id === "evidence" && <em>{reviewed.length}</em>}{id === "suspects" && <em>{questionedSuspects}</em>}</button>)}
+          </nav>
+
+          <div className="attempt-meta"><span>{caseData.difficulty}</span><span>ATTEMPT {attempts + (attemptClosed ? 0 : 1)}</span>{solvedBefore && <span className="closed-label">PREVIOUSLY SOLVED</span>}</div>
         </aside>
+
+        <section className="workspace-content">
+          {tab === "briefing" && <div className="workspace-page briefing-page">
+            <div className="page-heading"><div><div className="eyebrow">CASE BRIEFING</div><h1>{caseData.title}</h1></div><span>10-MINUTE FILE</span></div>
+            <div className="briefing-grid">
+              <div className="victim-dossier panel"><img src={portraitPath(caseData.id, "victim")} alt={caseData.victim} /><div><span className="dossier-label">VICTIM</span><h2>{caseData.victim}</h2><p>{caseData.victimAge} · {caseData.victimRole}</p></div></div>
+              <div className="brief-copy panel"><div className="eyebrow">INCIDENT SUMMARY</div><p>{caseData.briefing}</p><div className="objective-box"><span>OBJECTIVE</span>{caseData.objective}</div><button className="primary begin-button" onClick={() => setTab("evidence")}>OPEN EVIDENCE LOCKER →</button></div>
+            </div>
+            <div className="protocol-strip"><span><b>01</b> Inspect</span><span><b>02</b> Interrogate</span><span><b>03</b> Connect</span><span><b>04</b> Accuse</span></div>
+          </div>}
+
+          {tab === "evidence" && <div className="workspace-page">
+            <div className="page-heading"><div><div className="eyebrow">EVIDENCE LOCKER</div><h1>Physical & digital evidence</h1></div><span>{reviewed.length}/{evidence.length} REVIEWED</span></div>
+            <p className="page-intro">Inspect items. Some evidence becomes available only after related material has been examined.</p>
+            <div className="locker-grid">
+              {evidence.map((item) => {
+                const unlocked = evidenceUnlocked(caseData.id, item.id, reviewed);
+                const done = reviewed.includes(item.id);
+                const needs = unlockRequirement(caseData.id, item.id);
+                return <button key={item.id} className={`locker-card ${done ? "reviewed" : ""} ${!unlocked ? "locked" : ""}`} disabled={!unlocked} onClick={() => inspectEvidence(item)}>
+                  <div className="locker-card-top"><span className={done ? "reviewed-badge" : unlocked ? "unreviewed-badge" : "locked-badge"}>{done ? "REVIEWED" : unlocked ? "UNREVIEWED" : "LOCKED"}</span><span>{item.type.toUpperCase()}</span></div>
+                  <div className="evidence-glyph">{typeGlyph(item.type)}</div><h3>{item.title}</h3>
+                  <p>{unlocked ? (done ? item.description : "Evidence recovered. Open file to inspect the full finding.") : "Related evidence must be reviewed first."}</p>
+                  {item.time && unlocked && <small>{item.time}</small>}
+                  <b className="inspect-action">{!unlocked ? `REQUIRES ${needs.length} LINK${needs.length === 1 ? "" : "S"}` : done ? "✓ FINDING RECORDED" : "CLICK TO INSPECT"}</b>
+                </button>;
+              })}
+            </div>
+          </div>}
+
+          {tab === "suspects" && <div className="workspace-page">
+            <div className="page-heading"><div><div className="eyebrow">PERSONS OF INTEREST</div><h1>Interrogate suspects</h1></div><span>{questionedSuspects}/{suspects.length} QUESTIONED</span></div>
+            <p className="page-intro">Select a suspect. Ask direct questions, then attach reviewed evidence to challenge contradictions.</p>
+            <div className="suspect-workspace">
+              <div className="dossier-grid">
+                {suspects.map((s) => {
+                  const count = (chats[s.id] || []).filter((m) => m.role === "player").length;
+                  return <button key={s.id} className={`dossier-card ${activeSuspect === s.id ? "active" : ""}`} onClick={() => { setActiveSuspect(s.id); setAttached([]); }}>
+                    <img src={portraitPath(caseData.id, s.id)} alt={s.name} />
+                    <div><span className="dossier-status">{count ? `${count} Q` : "NEW"}</span><h3>{s.name}</h3><strong>{s.role} · {s.age}</strong><p>{s.relation}</p><small>“{s.statement}”</small></div>
+                  </button>;
+                })}
+              </div>
+
+              <div className="interrogation-room panel">
+                <div className="interrogation-profile"><img src={portraitPath(caseData.id, suspect.id)} alt={suspect.name} /><div><div className="eyebrow">LIVE INTERROGATION</div><h2>{suspect.name}</h2><p>{suspect.role} · {suspect.relation}</p></div></div>
+                <div className="chat">
+                  {history.length === 0 && <div className="empty-chat">No questions yet. Start with timeline, relationship to the victim, or a specific piece of reviewed evidence.</div>}
+                  {history.map((m, i) => <div key={i} className={`bubble ${m.role}`}><span>{m.role === "player" ? "YOU" : suspect.name.toUpperCase()}</span>{m.text}</div>)}
+                  {loading && <div className="bubble suspect"><span>{suspect.name.toUpperCase()}</span>...</div>}
+                </div>
+                <div className="attach-box"><div className="field-label">ATTACH REVIEWED EVIDENCE · MAX 3</div><div className="chips">{reviewedEvidence.length ? reviewedEvidence.map((e) => <button key={e.id} disabled={timedOut || attemptClosed} className={attached.includes(e.id) ? "chip selected" : "chip"} onClick={() => toggleAttached(e.id)}>{e.title}</button>) : <span className="no-attachment">Review evidence in the locker first.</span>}</div></div>
+                <div className="ask-row"><textarea disabled={timedOut || attemptClosed} value={question} onChange={(e) => setQuestion(e.target.value)} placeholder={`Question ${suspect.name.split(" ")[0]}...`} maxLength={500} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); askSuspect(); } }} /><button className="primary" onClick={askSuspect} disabled={loading || timedOut || attemptClosed}>ASK</button></div>
+              </div>
+            </div>
+          </div>}
+
+          {tab === "notes" && <div className="workspace-page notes-page">
+            <div className="page-heading"><div><div className="eyebrow">DETECTIVE NOTES</div><h1>Build your theory</h1></div><span>AUTO-SAVED</span></div>
+            <div className="notes-layout"><div className="notes-panel panel"><textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Timeline... contradictions... who knew what... motive..." /><small>AUTO-SAVED TO YOUR DETECTIVE ACCOUNT</small></div><div className="case-facts panel"><div className="eyebrow">FIELD SUMMARY</div><h3>{reviewed.length} evidence reviewed</h3><p>{questionedSuspects} suspects questioned</p><div className="mini-evidence-list">{reviewedEvidence.map((e) => <button key={e.id} onClick={() => { setInspecting(e); }}>{e.title}</button>)}</div></div></div>
+          </div>}
+
+          {tab === "accuse" && <div className="workspace-page accusation-page">
+            <div className="page-heading"><div><div className="eyebrow">FINAL ACCUSATION</div><h1>Build the case</h1></div><span>ONE ATTEMPT</span></div>
+            <p className="page-intro">Choosing the correct suspect is not enough. Establish motive and submit evidence strong enough to support the accusation.</p>
+            <div className="accusation panel"><div className="accuse-grid"><label><span>WHO?</span><select disabled={timedOut || attemptClosed} value={accused} onChange={(e) => setAccused(e.target.value)}>{suspects.map((s) => <option value={s.id} key={s.id}>{s.name}</option>)}</select></label><label><span>WHY?</span><select disabled={timedOut || attemptClosed} value={motive} onChange={(e) => setMotive(e.target.value)}>{motiveOptions.map((m) => <option value={m.id} key={m.id}>{m.label}</option>)}</select></label></div>
+              <div className="field-label">SELECT UP TO 5 REVIEWED PIECES OF PROOF</div><div className="proof-grid">{reviewedEvidence.map((e) => <button disabled={timedOut || attemptClosed} key={e.id} className={proof.includes(e.id) ? "proof-card selected" : "proof-card"} onClick={() => toggleProof(e.id)}><span>{typeGlyph(e.type)}</span><b>{e.title}</b><small>{e.type}</small></button>)}</div>
+              {!reviewedEvidence.length && <p className="no-proof">Review evidence before submitting an accusation.</p>}
+              <button className="primary submit" onClick={submitAccusation} disabled={timedOut || attemptClosed || reviewedEvidence.length < 3}>SUBMIT CASE</button>
+              {verdict && <div className={`verdict ${verdict.solved ? "closed" : "open"}`}><div className="score">{verdict.score}<small>/100</small></div><div><h2>{verdict.solved ? "CASE CLOSED" : "CASE REMAINS OPEN"}</h2><p>{verdict.message}</p><div className="checks"><span>{verdict.checks.suspect ? "✓" : "×"} Suspect</span><span>{verdict.checks.motive ? "✓" : "×"} Motive</span><span>{verdict.checks.evidence ? "✓" : "×"} Evidence</span><span>{verdict.checks.forensicCore ? "✓" : "×"} Core link</span></div>{verdict.explanation && <p className="explanation">{verdict.explanation}</p>}</div></div>}
+            </div>
+          </div>}
+        </section>
       </div>
 
-      <section className="accusation panel">
-        <div className="section-title"><span>04</span> FINAL ACCUSATION <em>ONE SHOT</em></div>
-        <div className="accuse-grid"><label><span>WHO?</span><select disabled={timedOut || attemptClosed} value={accused} onChange={(e) => setAccused(e.target.value)}>{suspects.map((s) => <option value={s.id} key={s.id}>{s.name}</option>)}</select></label><label><span>WHY?</span><select disabled={timedOut || attemptClosed} value={motive} onChange={(e) => setMotive(e.target.value)}>{motiveOptions.map((m) => <option value={m.id} key={m.id}>{m.label}</option>)}</select></label></div>
-        <div className="field-label">SELECT UP TO 5 PIECES OF PROOF</div><div className="chips proof">{evidence.map((e) => <button disabled={timedOut || attemptClosed} key={e.id} className={proof.includes(e.id) ? "chip selected" : "chip"} onClick={() => toggleProof(e.id)}>{e.title}</button>)}</div>
-        <button className="primary submit" onClick={submitAccusation} disabled={timedOut || attemptClosed}>SUBMIT CASE</button>
-
-        {verdict && <div className={`verdict ${verdict.solved ? "closed" : "open"}`}><div className="score">{verdict.score}<small>/100</small></div><div><h2>{verdict.solved ? "CASE CLOSED" : "CASE REMAINS OPEN"}</h2><p>{verdict.message}</p><div className="checks"><span>{verdict.checks.suspect ? "✓" : "×"} Suspect</span><span>{verdict.checks.motive ? "✓" : "×"} Motive</span><span>{verdict.checks.evidence ? "✓" : "×"} Evidence</span><span>{verdict.checks.forensicCore ? "✓" : "×"} Core link</span></div>{verdict.explanation && <p className="explanation">{verdict.explanation}</p>}</div></div>}
-      </section>
-
-      <footer>CASE//ZERO · {caseData.id} · FICTIONAL CASE</footer>
+      {inspecting && <div className="evidence-modal" onClick={() => setInspecting(null)}><article className="evidence-modal-card" onClick={(e) => e.stopPropagation()}><button className="modal-close" onClick={() => setInspecting(null)}>×</button><div className="evidence-modal-visual"><span>{typeGlyph(inspecting.type)}</span><small>{inspecting.type}</small></div><div className="evidence-modal-copy"><div className="eyebrow">EVIDENCE FILE · {caseData.id}</div><h2>{inspecting.title}</h2>{inspecting.time && <b className="evidence-time">{inspecting.time}</b>}<p>{inspecting.description}</p><div className="finding-stamp">✓ FINDING RECORDED</div></div></article></div>}
     </main>
   );
 }

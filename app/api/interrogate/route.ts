@@ -22,6 +22,10 @@ export async function POST(request: NextRequest) {
     const auth = await getAuthenticatedGameSession(request, caseId);
     if ("error" in auth) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
+    const reviewedEvidence = Array.isArray(auth.progress.reviewed_evidence) ? auth.progress.reviewed_evidence : [];
+    const invalidAttached = attached.filter((id) => !reviewedEvidence.includes(id));
+    if (invalidAttached.length) return NextResponse.json({ error: "Review evidence before using it in interrogation." }, { status: 403 });
+
     const publicCase = getCase(caseId);
     const secretCase = getSecretCase(caseId);
     const publicSuspect = publicCase?.suspects.find((s) => s.id === suspectId);

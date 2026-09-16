@@ -9,6 +9,7 @@ create table if not exists public.case_progress (
   last_played_at timestamptz,
   notes text not null default '',
   chats jsonb not null default '{}'::jsonb,
+  reviewed_evidence jsonb not null default '[]'::jsonb,
   attempt_started_at timestamptz,
   attempt_deadline_at timestamptz,
   attempt_closed boolean not null default false,
