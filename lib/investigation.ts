@@ -18,6 +18,27 @@ export const unlockRules: Record<string, Record<string, string[]>> = {
     "session-history": ["waveform"],
     "admin-login": ["session-history"],
     "royalty-email": ["door-log"]
+  },
+  CZ005: {
+    "gate-swipe": ["pier-cctv"],
+    "invoice-bundle": ["report-draft"],
+    "audio-spectrum": ["radio-call"],
+    "torch-grease": ["office-scene", "gate-swipe"],
+    "reporter-recorder": ["report-draft"]
+  },
+  CZ006: {
+    "keycard-log": ["master-key"],
+    "printer-log": ["settlement"],
+    consultancy: ["settlement", "printer-log"],
+    cufflink: ["bathroom-scene"],
+    "service-lift": ["keycard-log"]
+  },
+  CZ007: {
+    "uv-photo": ["inventory"],
+    "crate-seal": ["inventory"],
+    "sales-ledger": ["insurance-email"],
+    "varnish-trace": ["gallery-scene", "uv-photo"],
+    "curator-access": ["blackout-log"]
   }
 };
 

@@ -10,6 +10,8 @@ import { getSupabase, type CloudProgress } from "@/lib/supabase";
 import { useEntitlement } from "@/lib/entitlement";
 import AdBanner from "@/components/AdBanner";
 import SoundMixer from "@/components/SoundMixer";
+import SafeImage from "@/components/SafeImage";
+import { trackEvent } from "@/lib/analytics";
 
 type ChatMessage = { role: "player" | "suspect"; text: string };
 type Verdict = { solved: boolean; score: number; checks: { suspect: boolean; motive: boolean; evidence: boolean; forensicCore: boolean }; message: string; explanation?: string };
@@ -69,6 +71,7 @@ export default function Game({ caseData }: { caseData: CasePublic }) {
   const ambientAudio = useRef<HTMLAudioElement | null>(null);
   const warned60 = useRef(false);
   const warned30 = useRef(false);
+  const caseOpenedTracked = useRef(false);
   const { adFree } = useEntitlement(session);
 
   const suspect = useMemo(() => suspects.find((s) => s.id === activeSuspect)!, [activeSuspect, suspects]);
@@ -107,6 +110,10 @@ export default function Game({ caseData }: { caseData: CasePublic }) {
 
       const existingDeadline = row?.attempt_deadline_at ? new Date(row.attempt_deadline_at).getTime() : 0;
       const canResume = Boolean(row && !row.attempt_closed && existingDeadline > Date.now());
+      if (!caseOpenedTracked.current) {
+        caseOpenedTracked.current = true;
+        trackEvent(sessionData.session, "case_opened", { case_id: caseData.id, resumed: canResume });
+      }
 
       if (canResume && row) {
         setChats((row.chats || {}) as Record<string, ChatMessage[]>);
@@ -218,6 +225,7 @@ export default function Game({ caseData }: { caseData: CasePublic }) {
       await audio.play();
       ambientAudio.current = audio;
       setSoundOn(true);
+      trackEvent(session, "sound_enabled", { case_id: caseData.id });
     } catch { setApiError("Your browser blocked audio. Click SOUND ON again after interacting with the page."); }
   }
 
@@ -239,6 +247,7 @@ export default function Game({ caseData }: { caseData: CasePublic }) {
       setReviewed(next);
       playSfx("evidence");
       await saveCloud({ reviewed_evidence: next, notes, chats });
+      trackEvent(session, "evidence_reviewed", { case_id: caseData.id, evidence_id: item.id });
     }
   }
 
@@ -263,6 +272,7 @@ export default function Game({ caseData }: { caseData: CasePublic }) {
       setChats(finalChats);
       playSfx("click");
       await saveCloud({ chats: finalChats, notes, reviewed_evidence: reviewed });
+      trackEvent(session, "suspect_questioned", { case_id: caseData.id, suspect_id: activeSuspect, attached_count: attached.length });
     } catch (err) {
       setApiError(err instanceof Error ? err.message : "Interrogation failed.");
       await saveCloud({ chats: optimisticChats, notes, reviewed_evidence: reviewed });
@@ -283,6 +293,7 @@ export default function Game({ caseData }: { caseData: CasePublic }) {
       if (!res.ok) throw new Error(result.error || "Could not submit accusation.");
       setVerdict(result); setAttemptClosed(true); setBestScore((old) => Math.max(old, result.score)); setAttempts((old) => old + 1);
       playSfx(result.solved ? "solved" : "failed");
+      trackEvent(session, "accusation_submitted", { case_id: caseData.id, solved: result.solved, score: result.score, seconds_left: secondsLeft });
       if (result.solved) setSolvedBefore(true);
     } catch (err) { setApiError(err instanceof Error ? err.message : "Could not submit accusation."); }
   }
@@ -295,6 +306,7 @@ export default function Game({ caseData }: { caseData: CasePublic }) {
     }).eq("user_id", session.user.id).eq("case_id", caseData.id);
     if (error) { setApiError("Could not restart the investigation."); return; }
     setNotes(""); setChats({}); setReviewed([]); setVerdict(null); setAttached([]); setProof([]); setQuestion(""); setApiError(""); setTab("briefing"); setInspecting(null);
+    trackEvent(session, "attempt_restarted", { case_id: caseData.id });
     setDeadlineMs(deadline.getTime()); setSecondsLeft(ATTEMPT_SECONDS); setAttemptClosed(false); warned60.current = false; warned30.current = false; notesHydrated.current = true;
   }
 
@@ -323,7 +335,7 @@ export default function Game({ caseData }: { caseData: CasePublic }) {
       <div className="workspace-body">
         <aside className="workspace-sidebar">
           <div className="case-mini-card">
-            <img src={`/case-art/${caseData.id.toLowerCase()}.webp`} alt="Case location artwork" />
+            <SafeImage src={`/case-art/${caseData.id.toLowerCase()}.webp`} alt="Case location artwork" fallback={caseData.id} />
             <div><span>{caseData.kicker}</span><strong>{caseData.location}</strong><small>{caseData.scene}</small></div>
           </div>
 
@@ -340,14 +352,14 @@ export default function Game({ caseData }: { caseData: CasePublic }) {
           </nav>
 
           <div className="attempt-meta"><span>{caseData.difficulty}</span><span>ATTEMPT {attempts + (attemptClosed ? 0 : 1)}</span>{solvedBefore && <span className="closed-label">PREVIOUSLY SOLVED</span>}</div>
-          <AdBanner adFree={adFree} compact label="SPONSOR" />
+          <AdBanner adFree={adFree} compact label="SPONSOR" placement="case" />
         </aside>
 
         <section className="workspace-content">
           {tab === "briefing" && <div className="workspace-page briefing-page">
             <div className="page-heading"><div><div className="eyebrow">CASE BRIEFING</div><h1>{caseData.title}</h1></div><span>10-MINUTE FILE</span></div>
             <div className="briefing-grid">
-              <div className="victim-dossier panel"><img src={portraitPath(caseData.id, "victim")} alt={caseData.victim} /><div><span className="dossier-label">VICTIM</span><h2>{caseData.victim}</h2><p>{caseData.victimAge} · {caseData.victimRole}</p></div></div>
+              <div className="victim-dossier panel"><SafeImage src={portraitPath(caseData.id, "victim")} alt={caseData.victim} fallback={caseData.victim.split(" ").map((part) => part[0]).slice(0, 2).join("")} /><div><span className="dossier-label">VICTIM</span><h2>{caseData.victim}</h2><p>{caseData.victimAge} · {caseData.victimRole}</p></div></div>
               <div className="brief-copy panel"><div className="eyebrow">INCIDENT SUMMARY</div><p>{caseData.briefing}</p><div className="objective-box"><span>OBJECTIVE</span>{caseData.objective}</div><button className="primary begin-button" onClick={() => setTab("evidence")}>OPEN EVIDENCE LOCKER →</button></div>
             </div>
             <div className="protocol-strip"><span><b>01</b> Inspect</span><span><b>02</b> Interrogate</span><span><b>03</b> Connect</span><span><b>04</b> Accuse</span></div>
@@ -363,7 +375,7 @@ export default function Game({ caseData }: { caseData: CasePublic }) {
                 const needs = unlockRequirement(caseData.id, item.id);
                 return <button key={item.id} className={`locker-card ${done ? "reviewed" : ""} ${!unlocked ? "locked" : ""}`} disabled={!unlocked} onClick={() => inspectEvidence(item)}>
                   <div className="locker-card-top"><span className={done ? "reviewed-badge" : unlocked ? "unreviewed-badge" : "locked-badge"}>{done ? "REVIEWED" : unlocked ? "UNREVIEWED" : "LOCKED"}</span><span>{item.type.toUpperCase()}</span></div>
-                  <div className="evidence-thumb"><img src={evidencePath(caseData.id, item.id)} alt={item.title} /></div><h3>{item.title}</h3>
+                  <div className="evidence-thumb"><SafeImage src={evidencePath(caseData.id, item.id)} alt={item.title} fallback={typeGlyph(item.type)} /></div><h3>{item.title}</h3>
                   <p>{unlocked ? (done ? item.description : "Evidence recovered. Open file to inspect the full finding.") : "Related evidence must be reviewed first."}</p>
                   {item.time && unlocked && <small>{item.time}</small>}
                   <b className="inspect-action">{!unlocked ? `REQUIRES ${needs.length} LINK${needs.length === 1 ? "" : "S"}` : done ? "✓ FINDING RECORDED" : "CLICK TO INSPECT"}</b>
@@ -380,14 +392,14 @@ export default function Game({ caseData }: { caseData: CasePublic }) {
                 {suspects.map((s) => {
                   const count = (chats[s.id] || []).filter((m) => m.role === "player").length;
                   return <button key={s.id} className={`dossier-card ${activeSuspect === s.id ? "active" : ""}`} onClick={() => { setActiveSuspect(s.id); setAttached([]); }}>
-                    <img src={portraitPath(caseData.id, s.id)} alt={s.name} />
+                    <SafeImage src={portraitPath(caseData.id, s.id)} alt={s.name} fallback={s.initials} />
                     <div><span className="dossier-status">{count ? `${count} Q` : "NEW"}</span><h3>{s.name}</h3><strong>{s.role} · {s.age}</strong><p>{s.relation}</p><small>“{s.statement}”</small></div>
                   </button>;
                 })}
               </div>
 
               <div className="interrogation-room panel">
-                <div className="interrogation-profile"><img src={portraitPath(caseData.id, suspect.id)} alt={suspect.name} /><div><div className="eyebrow">LIVE INTERROGATION</div><h2>{suspect.name}</h2><p>{suspect.role} · {suspect.relation}</p></div></div>
+                <div className="interrogation-profile"><SafeImage src={portraitPath(caseData.id, suspect.id)} alt={suspect.name} fallback={suspect.initials} /><div><div className="eyebrow">LIVE INTERROGATION</div><h2>{suspect.name}</h2><p>{suspect.role} · {suspect.relation}</p></div></div>
                 <div className="chat">
                   {history.length === 0 && <div className="empty-chat">No questions yet. Start with timeline, relationship to the victim, or a specific piece of reviewed evidence.</div>}
                   {history.map((m, i) => <div key={i} className={`bubble ${m.role}`}><span>{m.role === "player" ? "YOU" : suspect.name.toUpperCase()}</span>{m.text}</div>)}
@@ -411,13 +423,13 @@ export default function Game({ caseData }: { caseData: CasePublic }) {
               <div className="field-label">SELECT UP TO 5 REVIEWED PIECES OF PROOF</div><div className="proof-grid">{reviewedEvidence.map((e) => <button disabled={timedOut || attemptClosed} key={e.id} className={proof.includes(e.id) ? "proof-card selected" : "proof-card"} onClick={() => toggleProof(e.id)}><span>{typeGlyph(e.type)}</span><b>{e.title}</b><small>{e.type}</small></button>)}</div>
               {!reviewedEvidence.length && <p className="no-proof">Review evidence before submitting an accusation.</p>}
               <button className="primary submit" onClick={submitAccusation} disabled={timedOut || attemptClosed || reviewedEvidence.length < 3}>SUBMIT CASE</button>
-              {verdict && <><div className={`verdict ${verdict.solved ? "closed" : "open"}`}><div className="score">{verdict.score}<small>/100</small></div><div><h2>{verdict.solved ? "CASE CLOSED" : "CASE REMAINS OPEN"}</h2><p>{verdict.message}</p><div className="checks"><span>{verdict.checks.suspect ? "✓" : "×"} Suspect</span><span>{verdict.checks.motive ? "✓" : "×"} Motive</span><span>{verdict.checks.evidence ? "✓" : "×"} Evidence</span><span>{verdict.checks.forensicCore ? "✓" : "×"} Core link</span></div>{verdict.explanation && <p className="explanation">{verdict.explanation}</p>}</div></div><AdBanner adFree={adFree} label="POST-CASE ADVERTISEMENT" /></>}
+              {verdict && <><div className={`verdict ${verdict.solved ? "closed" : "open"}`}><div className="score">{verdict.score}<small>/100</small></div><div><h2>{verdict.solved ? "CASE CLOSED" : "CASE REMAINS OPEN"}</h2><p>{verdict.message}</p><div className="checks"><span>{verdict.checks.suspect ? "✓" : "×"} Suspect</span><span>{verdict.checks.motive ? "✓" : "×"} Motive</span><span>{verdict.checks.evidence ? "✓" : "×"} Evidence</span><span>{verdict.checks.forensicCore ? "✓" : "×"} Core link</span></div>{verdict.explanation && <p className="explanation">{verdict.explanation}</p>}</div></div><AdBanner adFree={adFree} label="POST-CASE ADVERTISEMENT" placement="result" /></>}
             </div>
           </div>}
         </section>
       </div>
 
-      {inspecting && <div className="evidence-modal" onClick={() => setInspecting(null)}><article className="evidence-modal-card" onClick={(e) => e.stopPropagation()}><button className="modal-close" onClick={() => setInspecting(null)}>×</button><div className="evidence-modal-visual"><img src={evidencePath(caseData.id, inspecting.id)} alt={inspecting.title} /><small>{inspecting.type}</small></div><div className="evidence-modal-copy"><div className="eyebrow">EVIDENCE FILE · {caseData.id}</div><h2>{inspecting.title}</h2>{inspecting.time && <b className="evidence-time">{inspecting.time}</b>}<p>{inspecting.description}</p><div className="finding-stamp">✓ FINDING RECORDED</div></div></article></div>}
+      {inspecting && <div className="evidence-modal" onClick={() => setInspecting(null)}><article className="evidence-modal-card" onClick={(e) => e.stopPropagation()}><button className="modal-close" onClick={() => setInspecting(null)}>×</button><div className="evidence-modal-visual"><SafeImage src={evidencePath(caseData.id, inspecting.id)} alt={inspecting.title} fallback={typeGlyph(inspecting.type)} /><small>{inspecting.type}</small></div><div className="evidence-modal-copy"><div className="eyebrow">EVIDENCE FILE · {caseData.id}</div><h2>{inspecting.title}</h2>{inspecting.time && <b className="evidence-time">{inspecting.time}</b>}<p>{inspecting.description}</p><div className="finding-stamp">✓ FINDING RECORDED</div></div></article></div>}
     </main>
   );
 }

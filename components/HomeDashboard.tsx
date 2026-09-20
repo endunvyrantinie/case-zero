@@ -1,12 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { cases } from "@/lib/cases";
 import { getSupabase, type CloudProgress } from "@/lib/supabase";
 import { useEntitlement } from "@/lib/entitlement";
 import AdBanner from "@/components/AdBanner";
+import VisualAsset from "@/components/VisualAsset";
+import { trackEvent } from "@/lib/analytics";
 
 type ProgressMap = Record<string, CloudProgress>;
 
@@ -16,6 +18,7 @@ export default function HomeDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const { adFree } = useEntitlement(session);
+  const dashboardTracked = useRef(false);
 
   useEffect(() => {
     const supabase = getSupabase();
@@ -24,6 +27,7 @@ export default function HomeDashboard() {
     async function load(current: Session | null) {
       if (!mounted) return;
       setSession(current); setError("");
+      if (current && !dashboardTracked.current) { dashboardTracked.current = true; trackEvent(current, "dashboard_view"); }
       if (!current) { setProgress({}); setLoading(false); return; }
       const { data, error: queryError } = await supabase.from("case_progress").select("*").eq("user_id", current.user.id);
       if (!mounted) return;
@@ -63,21 +67,21 @@ export default function HomeDashboard() {
     {!session && !loading ? <>
       <section className="public-hero panel"><div><div className="eyebrow">YOUR DETECTIVE RECORD</div><h2>One account. Every case saved.</h2><p>Sign in before investigating. Your scores, notes, interrogation history and case status follow you across devices.</p></div><div className="public-actions"><Link href="/login?mode=signup" className="primary link-button">CREATE ACCOUNT</Link><Link href="/login" className="ghost-button">SIGN IN</Link></div></section>
       <div className="library-heading"><div><div className="eyebrow">CASE ARCHIVE</div><h2>Available investigations</h2></div><span>10 MINUTES EACH</span></div>
-      <section className="case-library">{cases.map((item, index) => <Link href={`/login?next=/case/${item.id}`} className={`case-card case-card-${item.id.toLowerCase()}`} key={item.id}><img className="case-card-art" src={`/case-art/${item.id.toLowerCase()}.webp`} alt="" /><div className="case-card-overlay" /><div className="case-card-top"><span>{item.id}</span><span className={`difficulty ${item.difficulty.toLowerCase()}`}>{item.difficulty}</span></div><div className="case-number">0{index + 1}</div><div className="case-kicker">{item.kicker}</div><h3>{item.title}</h3><p>{item.location}</p><div className="case-victim">VICTIM <b>{item.victim}</b></div><div className="case-card-bottom"><span>10 MIN</span><span>LOGIN TO OPEN</span></div></Link>)}</section>
+      <section className="case-library">{cases.map((item, index) => <Link href={`/login?next=/case/${item.id}`} className={`case-card case-card-${item.id.toLowerCase()}`} key={item.id}><VisualAsset className="case-card-art-wrap" imgClassName="case-card-art" src={`/case-art/${item.id.toLowerCase()}.webp`} alt={`${item.title} case artwork`} fallback={item.id} /><div className="case-card-overlay" /><div className="case-card-top"><span>{item.id}</span><span className={`difficulty ${item.difficulty.toLowerCase()}`}>{item.difficulty}</span></div><div className="case-number">0{index + 1}</div><div className="case-kicker">{item.kicker}</div><h3>{item.title}</h3><p>{item.location}</p><div className="case-victim">VICTIM <b>{item.victim}</b></div><div className="case-card-bottom"><span>10 MIN</span><span>LOGIN TO OPEN</span></div></Link>)}</section>
     </> : <>
       <section className="dashboard-grid">
         <div className="welcome panel"><div className="eyebrow">DETECTIVE DESK</div><h2>{loading ? "Loading record..." : `Welcome, ${detectiveName}`}</h2><p>Your investigation record is cloud-saved. Every attempt has a hard 10-minute limit.</p><div className="desk-rule">AI performs the suspects. Evidence decides the case.</div>{error && <div className="error dashboard-error">{error}</div>}</div>
         <div className="stats-panel panel"><div className="stat"><strong>{stats.solved}<small>/{cases.length}</small></strong><span>CASES SOLVED</span></div><div className="stat"><strong>{stats.average}</strong><span>AVG. SCORE</span></div><div className="stat"><strong>{stats.attempts}</strong><span>ACCUSATIONS</span></div><div className="stat"><strong>{stats.totalScore}</strong><span>TOTAL SCORE</span></div></div>
       </section>
 
-      {!adFree && <section className="monetise-row"><AdBanner adFree={false} /><Link href="/upgrade" className="remove-ads-card panel"><div className="upgrade-crown">♛</div><div><span className="eyebrow">LIFETIME UPGRADE</span><strong>Remove ads forever</strong><small>RM6.90 · one payment · unlimited cases stay included</small></div><b>UNLOCK →</b></Link></section>}
+      {!adFree && <section className="monetise-row"><AdBanner adFree={false} placement="home" /><Link href="/upgrade" className="remove-ads-card panel"><div className="upgrade-crown">♛</div><div><span className="eyebrow">LIFETIME UPGRADE</span><strong>Remove ads forever</strong><small>RM6.90 · one payment · unlimited cases stay included</small></div><b>UNLOCK →</b></Link></section>}
       {adFree && <section className="adfree-confirm panel"><span>✓</span><div><div className="eyebrow">AD-FREE LIFETIME</div><strong>Your account is distraction-free.</strong></div></section>}
 
       <div className="library-heading"><div><div className="eyebrow">ACTIVE FILES</div><h2>Case Library</h2></div><span>{cases.length} FILES · 10 MIN EACH</span></div>
       <section className="case-library">{cases.map((item, index) => {
         const p = progress[item.id];
         const active = p && !p.attempt_closed && p.attempt_deadline_at && new Date(p.attempt_deadline_at).getTime() > Date.now();
-        return <Link href={`/case/${item.id}`} className={`case-card case-card-${item.id.toLowerCase()}`} key={item.id}><img className="case-card-art" src={`/case-art/${item.id.toLowerCase()}.webp`} alt="" /><div className="case-card-overlay" /><div className="case-card-top"><span>{item.id}</span><span className={`difficulty ${item.difficulty.toLowerCase()}`}>{item.difficulty}</span></div><div className="case-number">0{index + 1}</div><div className="case-kicker">{item.kicker}</div><h3>{item.title}</h3><p>{item.location}</p><div className="case-victim">VICTIM <b>{item.victim}</b></div><div className="case-card-bottom"><span>10 MIN</span>{active ? <span className="attempted-tag">CONTINUE</span> : p ? <span className={p.solved ? "solved-tag" : "attempted-tag"}>{p.solved ? `CLOSED · ${p.best_score}` : `OPEN · ${p.best_score}`}</span> : <span>UNOPENED</span>}</div></Link>;
+        return <Link href={`/case/${item.id}`} className={`case-card case-card-${item.id.toLowerCase()}`} key={item.id}><VisualAsset className="case-card-art-wrap" imgClassName="case-card-art" src={`/case-art/${item.id.toLowerCase()}.webp`} alt={`${item.title} case artwork`} fallback={item.id} /><div className="case-card-overlay" /><div className="case-card-top"><span>{item.id}</span><span className={`difficulty ${item.difficulty.toLowerCase()}`}>{item.difficulty}</span></div><div className="case-number">0{index + 1}</div><div className="case-kicker">{item.kicker}</div><h3>{item.title}</h3><p>{item.location}</p><div className="case-victim">VICTIM <b>{item.victim}</b></div><div className="case-card-bottom"><span>10 MIN</span>{active ? <span className="attempted-tag">CONTINUE</span> : p ? <span className={p.solved ? "solved-tag" : "attempted-tag"}>{p.solved ? `CLOSED · ${p.best_score}` : `OPEN · ${p.best_score}`}</span> : <span>UNOPENED</span>}</div></Link>;
       })}</section>
     </>}
 

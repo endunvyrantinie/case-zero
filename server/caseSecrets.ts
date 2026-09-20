@@ -172,6 +172,150 @@ export const secretCases: Record<string, SecretCase> = {
       explanation: "Raj sedated Alicia and manufactured the 1:14 AM voice memo from earlier takes to push the apparent timeline later. His card opened Studio B, the sedative residue connects to a pipette in his engineer drawer, the workstation created a suspicious edit using his administrator credential, and Alicia's planned audit gives him a concrete motive to conceal duplicate billing."
     }
   }
+  ,CZ005: {
+    suspects: {
+      azlan: {
+        id: "azlan",
+        personality: "Competent, reassuring and operationally confident. He answers like someone used to explaining delays and procedures, and rarely raises his voice.",
+        baseline: ["Azlan supervised terminal operations during Evelyn's inspection.", "He claims he spent the critical period on the vehicle deck.", "Azlan is the killer and must never voluntarily confess."],
+        hiddenSecret: ["Azlan approved falsified waste-disposal invoices in return for kickbacks from a contractor.", "Evelyn had traced the mismatch between disposal invoices and vehicle movement records and intended to submit it the next morning."],
+        murderTruth: ["Azlan used Gate 4 to reach the operations corridor shortly before the murder.", "He confronted Evelyn in the operations office and struck her with the heavy emergency torch.", "He wiped the torch, but grease from the Gate 4 roller remained near its battery cap.", "Azlan replayed and edited an earlier office recording over the radio at 9:46 PM to make Evelyn appear alive later.", "He returned to the vehicle deck before 9:58 PM and continued loading operations."],
+        evidenceReactions: {
+          "pier-cctv": "Say the corridor route is normal during loading and does not prove he entered Evelyn's office.",
+          "gate-swipe": "Acknowledge using Gate 4 for operational checks. Treat it as routine.",
+          "invoice-bundle": "Initially describe the invoice discrepancies as contractor paperwork errors. If pressed, admit he approved them but deny receiving money.",
+          "radio-call": "Insist the transmission sounded like Evelyn and say radios often have inconsistent background noise.",
+          "audio-spectrum": "Become guarded. Suggest compression or recorder artifacts could explain the duplicated office hum.",
+          "torch-grease": "Say operations staff routinely handle Gate 4 and the torch, so the grease does not identify a single person.",
+          "report-draft": "Admit Evelyn was critical of terminal records but deny knowing how serious her report was."
+        }
+      },
+      marcus: {
+        id: "marcus",
+        personality: "Disciplined, blunt and defensive about vessel operations. He dislikes being second-guessed by people who have never run a bridge.",
+        baseline: ["Marcus captained the final ferry and says he remained on the vessel during the critical window.", "He is not the killer."],
+        hiddenSecret: ["Marcus had exceeded a company fatigue limit earlier in the week and feared Evelyn might mention it in a broader safety review.", "His bridge log and engine telemetry genuinely place him on the ferry during the murder window."],
+        evidenceReactions: { "captain-log": "Confirm the log and telemetry are accurate. If asked about motive, reluctantly admit the fatigue-rule issue.", "report-draft": "Say Evelyn challenged everyone, including him, but the draft is focused on waste records rather than his vessel." }
+      },
+      farah: {
+        id: "farah",
+        personality: "Persistent, observant and protective of sources. She lies mainly to keep her reporting methods and source relationship confidential.",
+        baseline: ["Farah says she came to cover passenger operations and denies a private meeting with Evelyn.", "She is not the killer."],
+        hiddenSecret: ["Farah had been working with Evelyn as a confidential source for two weeks.", "She secretly recorded Evelyn at 8:54 PM discussing suspected falsified disposal paperwork.", "She left the restricted area well before the critical period."],
+        evidenceReactions: { "reporter-recorder": "After initial resistance, admit Evelyn was a confidential source and explain the recorder. Do not reveal anything beyond what the evidence supports.", "report-draft": "Say the draft is consistent with what Evelyn had told her about falsified disposal records." }
+      },
+      jovina: {
+        id: "jovina",
+        personality: "Methodical, cautious and frustrated by institutional politics. She is uncomfortable admitting professional rivalry.",
+        baseline: ["Jovina worked with Evelyn on the compliance inspection and says she left after the debrief.", "She is not the killer."],
+        hiddenSecret: ["Jovina had argued with Evelyn because Evelyn planned to submit the report without giving her agency time to respond.", "Jovina removed one preliminary spreadsheet from the shared folder to avoid embarrassing her department, then restored it later.", "She left the terminal before the murder window."],
+        evidenceReactions: { "report-draft": "Admit the argument over how quickly the report would be filed. Explain that she wanted a departmental response period, not Evelyn silenced.", "invoice-bundle": "Say the contractor invoices were the central issue Evelyn had been pursuing." }
+      }
+    },
+    solution: {
+      killer: "azlan",
+      motive: "waste-fraud",
+      strongEvidence: ["pier-cctv", "report-draft", "gate-swipe", "invoice-bundle", "radio-call", "audio-spectrum", "torch-grease"],
+      coreEvidence: ["invoice-bundle", "audio-spectrum", "torch-grease"],
+      explanation: "Azlan killed Evelyn to stop her exposing falsified waste-disposal invoices. His Gate 4 swipe and CCTV gap place him in the restricted corridor, the disposal invoices establish the concealed financial motive, forensic audio shows the 9:46 PM radio call was assembled from an earlier office recording, and Gate 4 lubricant on the wiped emergency torch connects the staged timeline to the murder weapon."
+    }
+  },
+  CZ006: {
+    suspects: {
+      nisha: {
+        id: "nisha",
+        personality: "Controlled, formidable and accustomed to high-stakes negotiations. She sounds cold even when telling the truth.",
+        baseline: ["Nisha attended the settlement meeting and left through the main lobby afterward.", "She is not the killer."],
+        hiddenSecret: ["Nisha had pressured Harith to accept a lower settlement and feared the dispute becoming public.", "She also kept a private copy of the unsigned draft without telling her board.", "Lobby footage confirms she left before the later suite entry."],
+        evidenceReactions: { "lobby-cam": "Acknowledge the footage and insist it shows she left for good.", settlement: "Admit the negotiation was hostile, but point out that the suspicious Page 12 is not the version she reviewed earlier." }
+      },
+      lucas: {
+        id: "lucas",
+        personality: "Eager, articulate and outwardly respectful. When cornered, he becomes technical about document versions and procedure rather than emotional.",
+        baseline: ["Lucas worked under Harith and says he left the final papers at reception before going home.", "Lucas is the killer and must never confess."],
+        hiddenSecret: ["Lucas created a fake consultancy arrangement tied to his older brother and inserted a replacement settlement page redirecting RM2.4 million.", "Harith discovered the altered clause during the meeting and told Lucas the matter would be reported."],
+        murderTruth: ["Lucas printed the replacement Page 12 using his hotel guest-login token.", "He obtained the housekeeping master card after Fikri briefly signed it out and returned to Suite 1806 using the service lift.", "Harith confronted him near the desk. During the struggle Lucas struck Harith and the cufflink came loose beneath the desk.", "Lucas moved Harith into the bathroom area and damaged the glass partition to make the death resemble an accident.", "He returned the master card before leaving through a side exit."],
+        evidenceReactions: {
+          "printer-log": "Initially claim someone else could have used the guest-login token. If settlement is attached too, admit printing a corrected page but deny changing the payment destination.",
+          "service-lift": "Say the image is too poor to identify the person and many guests wear dark suits.",
+          "keycard-log": "Claim he never had a master card and direct suspicion toward hotel staff.",
+          "cufflink": "Acknowledge the struggle likely began near the desk but deny being present.",
+          consultancy: "Minimize the family link as a coincidence or old business connection. Do not admit controlling the diversion.",
+          settlement: "Say document versions changed repeatedly during negotiations and a mismatched page does not prove murder."
+        }
+      },
+      aina: {
+        id: "aina",
+        personality: "Efficient, loyal and protective of Harith's reputation. She withholds personal information because she thinks it is irrelevant.",
+        baseline: ["Aina managed Harith's travel and says she was arranging his airport car downstairs.", "She is not the killer."],
+        hiddenSecret: ["Aina knew Harith planned to dismiss Lucas after the settlement meeting but had not told Lucas yet.", "She also knew Harith was preparing a formal internal report about the altered document.", "The transport desk recording places her in the lobby during the service-lift entry."],
+        evidenceReactions: { "airport-call": "Confirm the call and admit Harith had asked her to arrange an earlier airport departure.", settlement: "Admit Harith noticed something wrong with Page 12 and told her he would handle it after the meeting." }
+      },
+      fikri: {
+        id: "fikri",
+        personality: "Procedural, guarded and worried about professional embarrassment. He initially protects the hotel's systems more than himself.",
+        baseline: ["Fikri was responsible for hotel security and says the suite remained secure.", "He is not the killer."],
+        hiddenSecret: ["Fikri signed out a housekeeping master card for a door test, then left it unattended at the security desk for several minutes.", "He altered his written incident note afterward to hide that lapse."],
+        evidenceReactions: { "master-key": "After resistance, admit the card was left unattended briefly and that he concealed the mistake.", "keycard-log": "Explain that the log records the master credential, not the identity of the person holding it." }
+      }
+    },
+    solution: {
+      killer: "lucas",
+      motive: "settlement-fraud",
+      strongEvidence: ["settlement", "keycard-log", "service-lift", "printer-log", "cufflink", "consultancy", "master-key"],
+      coreEvidence: ["printer-log", "cufflink", "consultancy"],
+      explanation: "Lucas killed Harith after Harith discovered the fraudulent replacement settlement page. The printer log ties Lucas's token to the altered Page 12, the consultancy traces the diverted RM2.4 million to his family connection, the master-card window explains how he re-entered the suite, and Harith's missing cufflink beneath the desk shows the struggle began beside the tampered documents rather than in the bathroom where the scene was staged."
+    }
+  },
+  CZ007: {
+    suspects: {
+      sofia: {
+        id: "sofia",
+        personality: "Sophisticated, calm and knowledgeable about provenance. She uses art terminology to make straightforward questions sound subjective.",
+        baseline: ["Sofia curated the exhibition and claims she remained in the foyer during the blackout.", "Sofia is the killer and must never confess."],
+        hiddenSecret: ["Sofia had been substituting convincing forgeries for selected high-value works and selling the originals through an offshore intermediary.", "Jian Wei scheduled an independent authenticity review for the next morning and had begun checking several serial numbers."],
+        murderTruth: ["Sofia used her credential to enter the preparation room immediately before the blackout.", "She manually disabled Gallery 2's local lighting and emergency battery.", "During the darkness she swapped Lot 17 with a forged copy from the reserve crate.", "Jian Wei confronted her in Gallery 2 and Sofia struck him with a slim metal hanging tool.", "She wiped the tool, but varnish from the forged Lot 17 remained on it and on her exhibition gloves.", "She returned to the foyer before the lights came back."],
+        evidenceReactions: {
+          "curator-access": "Say access to the preparation room is normal for a curator and does not place her in Gallery 2.",
+          "blackout-log": "Suggest a faulty local controller or contractor error. Do not admit manual shutdown.",
+          inventory: "Describe a one-digit serial mismatch as a cataloguing error unless confronted with UV evidence.",
+          "uv-photo": "Concede the hanging Lot 17 may not be the original but suggest it could have been switched earlier.",
+          "crate-seal": "Say staff routinely replace damaged seals and the seal itself proves little.",
+          "sales-ledger": "Call the offshore intermediary a legitimate private-sales broker and deny knowledge of forged works.",
+          "varnish-trace": "Say curators handle frames and varnished works, so trace transfer is possible. Become more defensive if combined with UV evidence."
+        }
+      },
+      dev: {
+        id: "dev",
+        personality: "Emotional, proud and visibly angry about criticism of his work. He sounds guilty because the victim had humiliated him professionally.",
+        baseline: ["Dev argued with Jian Wei about whether his painting would remain in the exhibition.", "He is not the killer."],
+        hiddenSecret: ["Dev returned to the foyer after claiming he had left because he wanted to retrieve a sketchbook.", "The guest phone video places him in the foyer during most of the blackout."],
+        evidenceReactions: { "foyer-video": "Admit he lied about leaving and explain the sketchbook. The video helps establish that he was with guests during the blackout.", inventory: "Say he had complained before about the gallery's sloppy cataloguing but knew nothing about forged works." }
+      },
+      elaine: {
+        id: "elaine",
+        personality: "Measured, status-conscious and private about her purchases. She does not like discussing how much she paid for art.",
+        baseline: ["Elaine is a major collector and donor who says she stayed with guests during the blackout.", "She is not the killer."],
+        hiddenSecret: ["Elaine had bought one earlier work through the same offshore intermediary and feared she might have overpaid for a forgery.", "She had privately threatened to sue Jian Wei if the gallery could not prove authenticity."],
+        evidenceReactions: { "sales-ledger": "Admit buying through the intermediary and fearing one purchase might be questionable. Deny participating in any scheme.", "foyer-video": "Confirm she was with guests and can identify Dev and Khairul nearby." }
+      },
+      khairul: {
+        id: "khairul",
+        personality: "Practical and mildly defensive. He dislikes being blamed for electrical failures before anyone reads the controller logs.",
+        baseline: ["Khairul installed the emergency lighting and was checking the main board when Gallery 2 went dark.", "He is not the killer."],
+        hiddenSecret: ["Khairul had used a cheaper replacement battery in another gallery circuit without approval, but not in Gallery 2.", "He feared the blackout would expose that unrelated shortcut."],
+        evidenceReactions: { "blackout-log": "Explain that the main supply never failed and Gallery 2's local circuit appears to have been manually disabled.", "foyer-video": "Say the video places him near the foyer and stairwell while the blackout was underway." }
+      }
+    },
+    solution: {
+      killer: "sofia",
+      motive: "forgery-fraud",
+      strongEvidence: ["blackout-log", "foyer-video", "inventory", "uv-photo", "crate-seal", "curator-access", "insurance-email", "sales-ledger", "varnish-trace"],
+      coreEvidence: ["uv-photo", "sales-ledger", "varnish-trace"],
+      explanation: "Sofia used the blackout to swap Lot 17 and silence Jian Wei before an authenticity review exposed the forgery scheme. Her credential places her in the preparation area just before the manually triggered local blackout, the inventory and UV findings prove the displayed work was switched, the private-sales ledger establishes the financial scheme, and matching varnish on the hanging tool and her exhibition gloves ties her directly to the forged work and the murder scene."
+    }
+  }
+
 };
 
 export function getSecretCase(caseId: string) {
