@@ -1,2 +1,11 @@
 import HomeDashboard from "@/components/HomeDashboard";
-export default function Home() { return <HomeDashboard />; }
+import HomeMusic from "@/components/HomeMusic";
+
+export default function Home() {
+  return (
+    <>
+      <HomeMusic />
+      <HomeDashboard />
+    </>
+  );
+}
